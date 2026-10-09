@@ -436,7 +436,7 @@ function renderReplayControls() {
   $("#replayBtn").title = state.data.axis ? "" : "Replay starts after the next hourly update";
 }
 
-let replayTimer = null;
+let replayTimer = null, replayEnds = 0;
 function stopReplay() {
   clearInterval(replayTimer); replayTimer = null;
   state.frame = null;
@@ -454,6 +454,7 @@ function startReplay() {
   let i = 0;
   $("#replayBtn").textContent = "■ STOP";
   const every = Math.max(60, Math.min(700, 12000 / frames.length));
+  replayEnds = performance.now() + every * frames.length;
   const pulseIdx = new Map(pulseDays.map(([d], k) => [d, k]));
   const bw = (PULSE.w - PULSE.pad * 2) / Math.max(pulseDays.length, 1);
   replayTimer = setInterval(() => {
@@ -585,7 +586,7 @@ function initGlobe(world, start) {
     applyScale();
     $("#zoomLvl").textContent = `${zoom.toFixed(1)}×`;
   };
-  let visible = true, lastDraw = 0, lastHud = 0, lastT = performance.now();
+  let visible = true, held = false, lastDraw = 0, lastHud = 0, lastT = performance.now();
 
   function resize() {
     const r = canvas.getBoundingClientRect();
@@ -741,7 +742,7 @@ function initGlobe(world, start) {
     requestAnimationFrame(frame);
     const dt = Math.min(t - lastT, 100);
     lastT = t;
-    if (!visible) return; // off-screen: skip (browsers already pause frames in background tabs)
+    if (!visible && !held) return; // off-screen: skip (browsers already pause frames in background tabs)
     if (anim) {
       const p = Math.min(1, (t - anim.t0) / 1100);
       rot = anim.i(d3.easeCubicInOut(p));
@@ -847,6 +848,7 @@ function initGlobe(world, start) {
 
   return {
     redraw() { dirty = true; },
+    hold(on) { held = on; dirty = true; },
     focus(code) {
       dirty = true;
       const v = code && state.views[code];
@@ -908,55 +910,130 @@ function wrapText(ctx, text, x, y, maxW, lh) {
   return y + lh;
 }
 
-async function makeCard() {
-  const W = 1080, H = 1350;
-  const c = document.createElement("canvas");
-  c.width = W; c.height = H;
-  const x = c.getContext("2d");
+// One vertical 9:16 frame (Shorts / Reels / TikTok size): headline, the live map or globe, flow, calls, link.
+function composeCard(x, W, H) {
+  const k = W / 1080;
   const css = getComputedStyle(document.body);
   const v = (n) => css.getPropertyValue(n).trim();
+  const font = (wgt, px, fam) => `${wgt} ${Math.round(px * k)}px ${fam}`;
+  const MONO = "'JetBrains Mono', monospace", DISP = "'Space Grotesk', sans-serif", SANS = "'Geist', sans-serif";
   x.fillStyle = v("--bg"); x.fillRect(0, 0, W, H);
-  x.fillStyle = v("--accent"); x.fillRect(0, 0, W, 60);
-  x.fillStyle = v("--accent-fg"); x.font = "600 22px 'JetBrains Mono', monospace"; x.textAlign = "center";
-  x.fillText(`GOD'S EYE VIEW // PRICE TRUTH // ${TF_HUD[state.tf]} BARS // ${state.data.generatedAt.slice(0, 10)}`, W / 2, 39);
-  const g = $("#globe");
-  let imgBottom;
-  if (state.view === "flat") {
-    const dh = (960 * g.height) / g.width;
-    x.drawImage(g, 0, 0, g.width, g.height, 60, 120, 960, dh);
-    imgBottom = 120 + dh;
-  } else {
-    const s = Math.min(g.width, g.height);
-    x.drawImage(g, (g.width - s) / 2, (g.height - s) / 2, s, s, 160, 70, 760, 760);
-    imgBottom = 830;
-  }
+  x.fillStyle = v("--accent"); x.fillRect(0, 0, W, 70 * k);
+  x.fillStyle = v("--accent-fg"); x.font = font(600, 25, MONO); x.textAlign = "center"; x.textBaseline = "alphabetic";
+  x.fillText(`GOD'S EYE VIEW // PRICE TRUTH // ${TF_HUD[state.tf]} BARS`, W / 2, 46 * k);
   x.textAlign = "left";
-  x.fillStyle = v("--fg"); x.font = "700 52px 'Space Grotesk', sans-serif";
-  const y = wrapText(x, $("#headline").textContent, 60, imgBottom + 70, 960, 60);
-  x.font = "700 32px 'Space Grotesk', sans-serif";
+  x.fillStyle = v("--accent"); x.font = font(600, 26, MONO);
+  x.fillText(`SITUATION REPORT · ${state.asset.toUpperCase()} · ${state.data.generatedAt.slice(0, 10)}`, 60 * k, 150 * k);
+  x.fillStyle = v("--fg"); x.font = font(700, 68, DISP);
+  wrapText(x, $("#headline").textContent, 60 * k, 235 * k, 960 * k, 78 * k);
+
+  // Map area: y 520..1480
+  const g = $("#globe"), top = 520 * k, areaH = 960 * k;
+  if (state.view === "flat") {
+    const dw = 1040 * k, dh = (dw * g.height) / g.width;
+    x.drawImage(g, 0, 0, g.width, g.height, 20 * k, top + (areaH - dh) / 2, dw, dh);
+  } else {
+    const sq = Math.min(g.width, g.height);
+    x.drawImage(g, (g.width - sq) / 2, (g.height - sq) / 2, sq, sq, 60 * k, top, areaH, areaH);
+  }
+  if (state.frame) {
+    x.fillStyle = v("--accent"); x.font = font(600, 26, MONO);
+    x.fillText($("#hudReplay").textContent, 60 * k, top + 20 * k);
+  }
+
+  const flowTxt = state.flow === "off" ? "" : $("#flowLine").textContent.slice($("#flowLine .flow-k")?.textContent.length ?? 0);
+  if (flowTxt) {
+    x.fillStyle = v("--fg-2"); x.font = font(500, 32, SANS);
+    wrapText(x, `→ ${flowTxt}`, 60 * k, 1540 * k, 960 * k, 40 * k);
+  }
+  x.font = font(700, 36, DISP);
   topCalls().forEach((call, i) => {
     x.fillStyle = call.verdict === "BUY" ? v("--up") : v("--down");
-    x.fillText(call.text.replace(/^\S+\s/, ""), 60 + (i % 2) * 490, Math.min(y, 1130) + 10 + Math.floor(i / 2) * 48);
+    x.fillText(call.text.replace(/^\S+\s/, ""), (60 + (i % 2) * 490) * k, (1665 + Math.floor(i / 2) * 52) * k);
   });
-  x.fillStyle = v("--fg-3"); x.font = "24px 'JetBrains Mono', monospace";
-  x.fillText(`${location.host}${location.pathname}`, 60, H - 70);
-  x.fillText("Headlines tell stories. Price tells the truth. Not advice.", 60, H - 34);
-  return new Promise((r) => c.toBlob(r, "image/png"));
+  x.fillStyle = v("--fg-3"); x.font = font(400, 25, MONO);
+  x.fillText(`${location.host}${location.pathname}`, 60 * k, 1835 * k);
+  x.fillText("Headlines tell stories. Price tells the truth. Not advice.", 60 * k, 1875 * k);
 }
 
-async function saveCard() {
-  globe?.redraw();
-  await new Promise((r) => setTimeout(r, 60));
-  const blob = await makeCard();
-  if (!blob) return;
-  const file = new File([blob], `gods-eye-view-${state.tf}-${state.data.generatedAt.slice(0, 10)}.png`, { type: "image/png" });
+function deliver(blob, ext) {
+  const file = new File([blob], `gods-eye-view-${state.view}-${state.tf}-${state.data.generatedAt.slice(0, 10)}.${ext}`, { type: blob.type });
   if (matchMedia("(pointer: coarse)").matches && navigator.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file], text: shareText() }); return; } catch {}
+    return navigator.share({ files: [file], text: shareText() }).catch(() => {});
   }
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = file.name;
   document.body.append(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+const VIDEO_TYPES = ["video/mp4;codecs=avc1.42E01E", "video/mp4", "video/webm;codecs=vp9", "video/webm"];
+let recording = false;
+function clipStatus(text) { $("#clip").textContent = text; }
+
+// Save a clip of the moving map: VIDEO (MP4 or WebM), GIF, or a still PNG.
+// If a replay is running, the clip records the rest of the replay (up to 20 s).
+async function saveClip(kind) {
+  if (recording) return;
+  $("#clipMenu").hidden = true;
+  recording = true;
+  globe?.hold(true);
+  try {
+    const gif = kind === "gif";
+    const W = gif ? 540 : 1080, H = gif ? 960 : 1920;
+    const c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    const x = c.getContext("2d", { willReadFrequently: gif });
+    if (kind === "png") {
+      composeCard(x, W, H);
+      const blob = await new Promise((r) => c.toBlob(r, "image/png"));
+      if (blob) await deliver(blob, "png");
+      return;
+    }
+    const dur = replayTimer ? Math.min(20000, Math.max(3000, replayEnds - performance.now())) : 8000;
+    const t0 = performance.now();
+    const tick = () => clipStatus(`● REC ${Math.ceil((dur - (performance.now() - t0)) / 1000)}s`);
+
+    if (!gif) {
+      const mime = window.MediaRecorder && VIDEO_TYPES.find((t) => MediaRecorder.isTypeSupported(t));
+      if (!mime) return saveClip("gif");
+      const rec = new MediaRecorder(c.captureStream(30), { mimeType: mime, videoBitsPerSecond: 8e6 });
+      const chunks = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      const stopped = new Promise((r) => { rec.onstop = r; });
+      composeCard(x, W, H);
+      rec.start(250);
+      await new Promise((done) => {
+        const loop = () => { composeCard(x, W, H); tick(); performance.now() - t0 < dur ? requestAnimationFrame(loop) : done(); };
+        requestAnimationFrame(loop);
+      });
+      rec.stop();
+      await stopped;
+      const type = mime.split(";")[0];
+      await deliver(new Blob(chunks, { type }), type === "video/mp4" ? "mp4" : "webm");
+      return;
+    }
+
+    const { GIFEncoder, quantize, applyPalette } = await import("./vendor/gifenc.esm.js");
+    const enc = GIFEncoder();
+    const fps = 10, frames = Math.round((dur / 1000) * fps);
+    for (let i = 0; i < frames; i++) {
+      const due = t0 + (i * 1000) / fps;
+      await new Promise((r) => setTimeout(r, Math.max(0, due - performance.now())));
+      composeCard(x, W, H);
+      const { data } = x.getImageData(0, 0, W, H);
+      const palette = quantize(data, 128, { format: "rgb444" });
+      enc.writeFrame(applyPalette(data, palette, "rgb444"), W, H, { palette, delay: 1000 / fps });
+      tick();
+    }
+    enc.finish();
+    clipStatus("ENCODING…");
+    await deliver(new Blob([enc.bytes()], { type: "image/gif" }), "gif");
+  } finally {
+    recording = false;
+    globe?.hold(false);
+    clipStatus("SAVE CLIP ⤓");
+  }
 }
 
 /* ---------- Controls, URL state ---------- */
@@ -1003,7 +1080,9 @@ function wireControls() {
   $("#drawerClose").addEventListener("click", closeDrawer);
   $("#drawer").addEventListener("click", (e) => { if (e.target.id === "drawer" && e.detail < 2) closeDrawer(); });
   $("#share").addEventListener("click", share);
-  $("#card").addEventListener("click", saveCard);
+  $("#clip").addEventListener("click", (e) => { e.stopPropagation(); if (!recording) $("#clipMenu").hidden = !$("#clipMenu").hidden; });
+  $("#clipMenu").addEventListener("click", (e) => { const b = e.target.closest("[data-kind]"); if (b) saveClip(b.dataset.kind); });
+  document.addEventListener("click", (e) => { if (!e.target.closest(".clip-wrap")) $("#clipMenu").hidden = true; });
   $("#replayBtn").addEventListener("click", startReplay);
   $("#stepSeg").addEventListener("click", (e) => { if (e.target.dataset.v && !e.target.disabled) { stopReplay(); state.replayStep = e.target.dataset.v; renderReplayControls(); } });
   $("#rangeSeg").addEventListener("click", (e) => { if (e.target.dataset.v) { stopReplay(); state.replayRange = e.target.dataset.v; renderReplayControls(); } });

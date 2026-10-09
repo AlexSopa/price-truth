@@ -34,7 +34,7 @@ Attach a 15-second screen capture (globe spin → FLIR → click a country). Use
 
 ## Ready-made clips in the page
 - **60-day replay** (press `R` or the ▶ button): the globe recolors day by day for 9 seconds. Screen-record it in FLIR for a Short.
-- **SAVE CARD**: a 1080×1350 image of the current view with the headline and calls. Post it as is.
+- **SAVE CLIP**: records the moving map as a vertical 1080×1920 video (MP4 or WebM, 8 s), a 540×960 GIF, or a PNG. Start a replay first and the clip records the replay (up to 20 s). Post it as is to Shorts, Reels, TikTok or X.
 - **Reversals panel**: "24 markets just reversed" is a strong weekly hook.
 - **Your market card**: each viewer sees their own country first. Ask people to post theirs.
 

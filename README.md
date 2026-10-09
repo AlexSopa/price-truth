@@ -7,7 +7,7 @@ A spy satellite for the world's money. 97 markets in 36 countries (stock indices
 1. `scripts/build.mjs` runs every hour on trading days (GitHub Actions, `.github/workflows/daily.yml`). The workflow also re-enables its own schedule, so GitHub never turns it off.
 2. It reads 2 years of daily bars per market from Yahoo Finance, builds W/M/Q/Y bars, and labels each bar `1`, `2u`, `2d` or `3` with its color. Bars still trading are kept (the bar in force) and flagged `live`. If a market fails, its last good entry is kept and flagged `stale`.
 3. It writes **only those labels** to `data/signals.json`. No prices are stored or published.
-4. `index.html` + `app.js` load that file. All counting, country verdicts, reversals, East vs West, the 60-day replay, the share card and the globe run in the viewer's browser. d3, topojson and the world map are in `vendor/`, so no CDN is needed.
+4. `index.html` + `app.js` load that file. All counting, country verdicts, reversals, East vs West, the timeframe replay, the flat map / globe, and the SAVE CLIP recorder (video via MediaRecorder, GIF via `vendor/gifenc.esm.js`) run in the viewer's browser. d3, topojson and the world map are in `vendor/`, so no CDN is needed.
 
 Why not fetch Yahoo directly from the browser: Yahoo sends no CORS header, so a browser on github.io cannot read it. Free public CORS relays are down or paid. Optional: run your own relay, add its URL prefix to `RELAYS` in `app.js`, and open `index.html?relay=<prefix>`. The page then fetches Yahoo and computes everything in the browser. Local relays (`http://127.0.0.1`, `http://localhost`) are always allowed.
 

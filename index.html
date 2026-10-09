@@ -44,7 +44,15 @@
     </div>
     <div class="meta" id="tracking"></div>
     <div class="actions">
-      <button class="share ghost" id="card" type="button">SAVE CARD ⤓</button>
+      <div class="clip-wrap">
+        <button class="share ghost" id="clip" type="button" aria-haspopup="true">SAVE CLIP ⤓</button>
+        <div class="clip-menu" id="clipMenu" hidden>
+          <button data-kind="video">VIDEO <small>MP4 / WEBM · 1080×1920 · 8s</small></button>
+          <button data-kind="gif">GIF <small>540×960 · 8s</small></button>
+          <button data-kind="png">IMAGE <small>PNG · 1080×1920</small></button>
+          <p>Tip: start a REPLAY first, then save. The clip records the replay.</p>
+        </div>
+      </div>
       <button class="share" id="share" type="button">SHARE INTEL ↗</button>
     </div>
   </header>
