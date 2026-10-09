@@ -1,15 +1,26 @@
-import { COUNTRIES, BYOK_MARKETS } from "./universe.js?v=4";
-import { TIMEFRAMES, control, continuity, reversal, isTurn, decodeState, periodKey } from "./strat.js?v=4";
-import { buildSignals } from "./signals.js?v=4";
-import { PROVIDERS, loadMarkets } from "./byok.js?v=4";
-import { unseal } from "./vault.js?v=4";
+import { COUNTRIES, BYOK_MARKETS } from "./universe.js?v=5";
+import { TIMEFRAMES, control, continuity, reversal, isTurn, decodeState, periodKey } from "./strat.js?v=5";
+import { buildSignals } from "./signals.js?v=5";
+import { PROVIDERS, loadMarkets } from "./byok.js?v=5";
+import { unseal } from "./vault.js?v=5";
 
 const TF_NAME = { D: "Today", W: "This week", M: "This month", Q: "This quarter", Y: "This year" };
 const TF_WORD = { D: "day", W: "week", M: "month", Q: "quarter", Y: "year" };
 const TF_HUD = { D: "DAY", W: "WEEK", M: "MONTH", Q: "QUARTER", Y: "YEAR" };
-const TF_BTN = { D: "DAY", W: "WEEK", M: "MONTH", Q: "QTR", Y: "YEAR" };
+const TF_BTN = { D: "Day", W: "Week", M: "Month", Q: "Qtr", Y: "Year" };
 const TF_PREV = { D: "yesterday's", W: "last week's", M: "last month's", Q: "last quarter's", Y: "last year's" };
 const S_LABEL = { "1": "1", "2u": "2U", "2d": "2D", "3": "3" };
+// Inline icons (no emoji or Unicode glyphs as icons).
+const ic = (inner) => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+const ICON = {
+  play: ic('<path d="M7 5v14l11-7z" fill="currentColor" stroke="none"/>'),
+  stop: ic('<rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor" stroke="none"/>'),
+  down: ic('<path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/>'),
+  out: ic('<path d="M7 17 17 7M8 7h9v9"/>'),
+  lock: ic('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'),
+};
+// Country code tag: same on every platform (flag emoji show as plain letters on Windows).
+const cc = (code) => (code && code !== "GLOBAL" ? `<span class="cc">${code}</span>` : "");
 const WORLD_URL = "vendor/countries-110m.json";
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -321,11 +332,11 @@ function renderIntel() {
   $("#subline").textContent = sub;
 
   $("#counts").innerHTML = [
-    ["up", n["2u"], "2U · broke the high"],
-    ["down", n["2d"], "2D · broke the low"],
-    ["", n["1"], "1 · coiling"],
-    ["out", n["3"], "3 · broke both"],
-  ].map(([c, v, l], i) => `<div class="count ${c}"${tipAttr(["2u", "2d", "1", "3"][i])}><b>${v}</b><span>${l}</span></div>`).join("");
+    ["up", n["2u"], "Broke the high", "2U"],
+    ["down", n["2d"], "Broke the low", "2D"],
+    ["", n["1"], "Coiling", "1"],
+    ["out", n["3"], "Broke both", "3"],
+  ].map(([c, v, l, code], i) => `<div class="count ${c}"${tipAttr(["2u", "2d", "1", "3"][i])}><b>${v}</b><span>${l} <em>${code}</em></span></div>`).join("");
 
   // East vs West
   const side = (s) => {
@@ -340,7 +351,7 @@ function renderIntel() {
   $("#tugWest").style.background = W.score >= 0 ? "var(--up)" : "var(--down)";
   $("#tugEast").style.background = E.score >= 0 ? "var(--up)" : "var(--down)";
   const gap = W.score - E.score;
-  $("#tugVerdict").textContent = Math.abs(gap) < 0.15 ? "DEAD EVEN" : gap > 0 ? "◀ MONEY FAVORS THE WEST" : "MONEY FAVORS THE EAST ▶";
+  $("#tugVerdict").textContent = Math.abs(gap) < 0.15 ? "Dead even" : gap > 0 ? "← Money favors the West" : "Money favors the East →";
   $("#tugWestTxt").textContent = `▲${W.up} ▼${W.down}`;
   $("#tugEastTxt").textContent = `▲${E.up} ▼${E.down}`;
 
@@ -357,15 +368,15 @@ function renderIntel() {
   const cards = [...pick("BUY"), ...pick("SELL")];
   $("#calls").innerHTML = cards.length
     ? cards.map(({ v, g, agree }) => `<button class="call ${vClass(g.verdict)}" data-country="${v.code}">
-          <b>${v.flag} ${esc(callText(v, asset, g.verdict))}</b>
+          <b>${cc(v.code)}${esc(callText(v, asset, g.verdict))}</b>
           <span>${esc(g.lead.name)} · ${S_LABEL[g.lead.tf[tf].s]} on the ${TF_WORD[tf]}${asset === "bonds" ? ` · ${rateWords(g.verdict)}` : ""}${agree ? ` · <em${tipAttr("ftfc")}>FTFC ${g.verdict === "BUY" ? "UP" : "DN"}</em>` : ""}</span></button>`).join("")
     : `<div class="calls-empty">NO CLEAN CALLS ON THIS TIMEFRAME. THE WORLD IS UNDECIDED.</div>`;
 
   $("#insights").innerHTML = insights().map((t) => `<li>${t}</li>`).join("");
   const rev = state.flow === "reversal";
   const { src, dst } = rev ? flowPairs((code) => revScore(code), FLOW_MIN.reversal) : flowPairs((code) => state.views[code]?.groups[asset]?.score);
-  const names = (arr) => arr.slice(0, 3).map((p) => `${state.views[p.code].flag} ${esc(state.views[p.code].name)}`).join(", ");
-  const k = `<span class="flow-k">${rev ? "REVERSAL FLOW" : "MONEY FLOW"} · ${TF_HUD[tf]}</span>`;
+  const names = (arr) => joinWords(arr.slice(0, 3).map((p) => esc(state.views[p.code].name)));
+  const k = `<span class="flow-k">${rev ? "Reversal flow" : "Money flow"} this ${TF_WORD[tf]}</span>`;
   $("#flowLine").hidden = state.flow !== "control"; // in reversal mode the headline says it
   $("#flowLine").innerHTML = src.length && dst.length
     ? `${k}${rev ? "Reversing down, money leaving" : "Out of"} <b class="down">${names(src)}</b> <span class="flow-arrow">→</span> ${rev ? "reversing up, money arriving in" : "into"} <b class="up">${names(dst)}</b>`
@@ -436,9 +447,9 @@ function renderMine() {
   const rev = reversal(g.lead.tf[state.tf]);
   $("#mine").hidden = false;
   $("#mine").innerHTML = `<button class="mine ${vClass(g.verdict)}" data-country="${v.code}">
-    <span class="mine-k">YOUR MARKET · ${esc(v.name.toUpperCase())}</span>
-    <b>${v.flag} ${esc(VERDICT_WORDS[g.verdict])} ${state.tf === "D" ? "today" : `this ${TF_WORD[state.tf]}`}.</b>
-    <span>${esc(g.lead.name)}: ${green} of 5 timeframes green${rev ? ` · ↺ ${rev.name}` : ""} · SEE INSIDE →</span></button>`;
+    <span class="mine-k">Your market: ${cc(v.code)}${esc(v.name)}</span>
+    <b>${esc(VERDICT_WORDS[g.verdict])} ${state.tf === "D" ? "today" : `this ${TF_WORD[state.tf]}`}.</b>
+    <span>${esc(g.lead.name)}: ${green} of 5 timeframes green${rev ? `, ${rev.name}` : ""}. See inside →</span></button>`;
 }
 
 /* ---------- Render: tiles ---------- */
@@ -458,7 +469,7 @@ const ftfcTag = (ftfc) => (ftfc ? `<div class="ftfc-tag ${ftfc > 0 ? "up" : "dow
 function renderCountries() {
   const { tf, asset } = state;
   const views = Object.values(state.views).sort((a, b) => (b.groups[asset]?.score ?? -9) - (a.groups[asset]?.score ?? -9));
-  $("#countryMeta").textContent = `${views.length} NATIONS · SORTED BY ${asset.toUpperCase()} ON THE ${TF_HUD[tf]} · CLICK FOR EVERY MARKET INSIDE`;
+  $("#countryMeta").textContent = `${views.length} nations, strongest ${asset} first on the ${TF_WORD[tf]}. Click one for every market inside.`;
   $("#countryGrid").innerHTML = views.map((v) => {
     const g = v.groups[asset];
     const verdict = g ? g.verdict : `NO ${asset.toUpperCase()}`;
@@ -466,7 +477,7 @@ function renderCountries() {
       `<div class="row"><span class="lbl">${a.toUpperCase()}</span>${cells(v.groups[a].lead, tf)}</div>`).join("");
     const rev = g && reversal(g.lead.tf[tf]);
     return `<button class="tile ${g?.ftfc > 0 ? "ftfc-up" : g?.ftfc < 0 ? "ftfc-down" : ""}${g ? "" : " dim"}" data-country="${v.code}">
-      <div class="cap"><span class="name">${v.flag} ${esc(v.name)}<span class="side">${v.side.toUpperCase()}</span></span>
+      <div class="cap"><span class="name">${cc(v.code)}${esc(v.name)}</span>
       <span class="verdict ${vClass(verdict)}">${esc(verdict)}</span></div>
       ${rows}${ftfcTag(g?.ftfc)}${rev ? `<div class="rev-tag ${rev.dir > 0 ? "up" : "down"}"${tipAttr(rev.doc)}>↺ ${esc(rev.name)} on the ${TF_WORD[tf]}</div>` : ""}
     </button>`;
@@ -495,19 +506,22 @@ function renderReversals() {
     const rows = all.filter((x) => x.r.dir === dir).sort((a, b) => REV_RANK(a.r) - REV_RANK(b.r));
     if (!rows.length) return `<div class="rev-empty">No ${dir > 0 ? "upside" : "downside"} signals on the ${TF_WORD[tf]}.</div>`;
     const open = state.revAll;
-    const more = !open && rows.length > 12 ? `<button class="rev-more" data-revall="1">SHOW ALL ${rows.length} ↓</button>` : "";
-    return rows.slice(0, open ? rows.length : 12).map(({ m, r }) => {
+    const more = !open && rows.length > 8 ? `<button class="rev-more" data-revall="1">Show all ${rows.length}</button>` : "";
+    let lastStory = "";
+    return rows.slice(0, open ? rows.length : 8).map(({ m, r }) => {
       const c = COUNTRIES[m.country];
-      return `<button class="rev-row" ${m.country !== "GLOBAL" ? `data-country="${m.country}"` : ""}>
-        <span class="rev-name">${c.flag} ${esc(m.name)}<small>${esc(m.country === "GLOBAL" ? m.kind.toUpperCase() : c.name.toUpperCase())}</small></span>
-        <span class="rev-chip ${dir > 0 ? "up" : "down"} k-${r.kind}"${tipAttr(r.doc)}>${esc(r.name)}</span>
-        <span class="rev-story">${esc(story(r))}</span></button>`;
+      const st = story(r);
+      const head = st !== lastStory ? `<h4 class="rev-group">${esc(st)}</h4>` : "";
+      lastStory = st;
+      return `${head}<button class="rev-row" ${m.country !== "GLOBAL" ? `data-country="${m.country}"` : ""}>
+        <span class="rev-name">${cc(m.country)}${esc(m.name)}<small>${esc(m.country === "GLOBAL" ? m.kind : c.name)}</small></span>
+        <span class="rev-chip ${dir > 0 ? "up" : "down"} k-${r.kind}"${tipAttr(r.doc)}>${esc(r.name)}</span></button>`;
     }).join("") + more;
   };
   $("#revUp").innerHTML = col(1);
   $("#revDown").innerHTML = col(-1);
   const turns = all.filter((x) => isTurn(x.r)).length;
-  $("#revMeta").textContent = `${turns} REVERSING · ${all.length - turns} CONTINUING · ${TF_HUD[tf]} BARS · HOVER A SIGNAL FOR THE TheStrat DOCS DEFINITION`;
+  $("#revMeta").textContent = `${turns} reversing and ${all.length - turns} continuing on the ${TF_WORD[tf]}. Hover a signal for its TheStrat definition.`;
 }
 
 /* ---------- Render: global pulse (daily breadth) ---------- */
@@ -602,7 +616,7 @@ function renderReplayControls() {
   setPressed("stepSeg", step);
   setPressed("rangeSeg", range);
   document.querySelector('#stepSeg [data-v="bar"]').disabled = tf === "D" || tf === "Y";
-  if (!replayTimer) $("#replayBtn").textContent = `▶ REPLAY ${TF_HUD[tf]} BARS`;
+  if (!replayTimer) $("#replayBtn").innerHTML = `${ICON.play}<span>Replay ${TF_WORD[tf]} bars</span>`;
   $("#replayBtn").disabled = !state.data.axis;
   $("#replayBtn").title = state.data.axis ? "" : "Replay needs the full history; it appears when loading finishes";
 }
@@ -623,7 +637,7 @@ function startReplay() {
   const frames = buildReplay(state.asset, tf, step, RANGE_DAYS[range]);
   if (!frames.length) return;
   let i = 0;
-  $("#replayBtn").textContent = "■ STOP";
+  $("#replayBtn").innerHTML = `${ICON.stop}<span>Stop</span>`;
   const every = Math.max(60, Math.min(700, 12000 / frames.length));
   replayEnds = performance.now() + every * frames.length;
   const pulseIdx = new Map(pulseDays.map(([d], k) => [d, k]));
@@ -688,8 +702,8 @@ function openCountry(code, refocus = true) {
       ${others.length ? `<p class="dr-also">Also reversing: ${others.map(([t, r]) => `${esc(r.name)} (${TF_WORD[t]})`).join(" · ")}</p>` : ""}
       <div class="seq"><em>LAST 12 DAYS</em>${m.hist.slice(-12).map(([d, s, gg]) => `<i class="${gClass(gg)}" title="${esc(d)}">${S_LABEL[s] ?? "?"}</i>`).join("")}</div></div>`;
   };
-  $("#drawerBody").innerHTML = `<div class="dr-kicker">TARGET ACQUIRED · ${v.side.toUpperCase()} · ${TF_HUD[tf]} BARS</div>
-    <h3 id="drawerTitle">${v.flag} ${esc(v.name)}</h3><p class="dr-say">${esc(say)}</p>
+  $("#drawerBody").innerHTML = `<div class="dr-kicker">Target acquired. ${v.side}, ${TF_WORD[tf]} bars.</div>
+    <h3 id="drawerTitle">${cc(v.code)}${esc(v.name)}</h3><p class="dr-say">${esc(say)}</p>
     ${Object.entries(v.groups).map(([a, g]) => `<div class="dr-group"><h4>${a.toUpperCase()} <span class="verdict ${vClass(g.verdict)}">${esc(g.verdict)}</span></h4>${g.members.map(item).join("")}</div>`).join("")}
     <p class="disclaim">Education only. Not investment advice.</p>`;
   const wasHidden = $("#drawer").hidden;
@@ -981,7 +995,7 @@ function initGlobe(world, start) {
     dirty = true;
     const v = code && state.views[code], g = v?.groups[state.asset];
     $("#hudTarget").innerHTML = g
-      ? `<b>${v.flag} ${esc(v.name)}</b><span class="v-${vClass(g.verdict)}">${esc(g.verdict === "BUY" || g.verdict === "SELL" ? callText(v, state.asset, g.verdict) : g.verdict)}</span><br>${esc(g.lead.name)} · ${S_LABEL[g.lead.tf[state.tf]?.s] ?? "–"} · ${TF_HUD[state.tf]}`
+      ? `<b>${cc(v.code)}${esc(v.name)}</b><span class="v-${vClass(g.verdict)}">${esc(g.verdict === "BUY" || g.verdict === "SELL" ? callText(v, state.asset, g.verdict) : g.verdict)}</span><br>${esc(g.lead.name)} · ${S_LABEL[g.lead.tf[state.tf]?.s] ?? "–"} · ${TF_HUD[state.tf]}`
       : "";
   });
   canvas.addEventListener("pointerleave", () => { state.hover = null; dirty = true; $("#hudTarget").innerHTML = ""; });
@@ -1141,7 +1155,7 @@ function deliver(blob, ext) {
     : `<img src="${lastClipUrl}" alt="Saved clip preview">`;
   const save = $("#clipSave");
   save.href = lastClipUrl; save.download = name;
-  save.textContent = `SAVE ${ext.toUpperCase()} ⤓ · ${(blob.size / 1e6).toFixed(1)} MB`;
+  save.innerHTML = `${ICON.down}<span>Save ${ext.toUpperCase()} (${(blob.size / 1e6).toFixed(1)} MB)</span>`;
   const canShare = navigator.canShare?.({ files: [file] });
   $("#clipShare").hidden = !canShare;
   $("#clipShare").onclick = () => navigator.share({ files: [file], text: shareText() }).catch(() => {});
@@ -1150,7 +1164,7 @@ function deliver(blob, ext) {
 
 const VIDEO_TYPES = ["video/mp4;codecs=avc1.42E01E", "video/mp4", "video/webm;codecs=vp9", "video/webm"];
 let recording = false, stopPage = null;
-function clipStatus(text) { $("#clip").textContent = text; }
+function clipStatus(text) { $("#clip").innerHTML = text === "SAVE CLIP" ? `${ICON.down}<span>Save clip</span>` : `<span>${esc(text)}</span>`; }
 const pickMime = () => window.MediaRecorder && VIDEO_TYPES.find((t) => MediaRecorder.isTypeSupported(t));
 
 function recordStream(stream, mime, until) {
@@ -1180,7 +1194,7 @@ async function recordPage() {
     stream.getVideoTracks()[0].addEventListener("ended", resolve);
     const timer = setInterval(() => {
       const sec = Math.floor((performance.now() - t0) / 1000);
-      clipStatus(`■ STOP · ${sec}s`);
+      clipStatus(`Stop recording (${sec}s)`);
       if (sec >= 60) resolve();
     }, 250);
     resolve.timer = timer;
@@ -1193,7 +1207,7 @@ async function recordPage() {
 }
 function alertClip(msg) {
   $("#clipPreview").innerHTML = `<p class="clip-msg">${esc(msg)}</p>`;
-  $("#clipSave").removeAttribute("href"); $("#clipSave").textContent = "—"; $("#clipShare").hidden = true;
+  $("#clipSave").removeAttribute("href"); $("#clipSave").textContent = "Nothing to save"; $("#clipShare").hidden = true;
   $("#clipResult").hidden = false;
 }
 
@@ -1264,7 +1278,7 @@ async function saveClip(kind) {
   } finally {
     recording = false;
     globe?.hold(false);
-    clipStatus("SAVE CLIP ⤓");
+    clipStatus("SAVE CLIP");
   }
 }
 
@@ -1274,7 +1288,7 @@ function showTip(el) {
   const d = DOCS[el.dataset.tip];
   if (!d) return;
   const tip = $("#tip");
-  tip.innerHTML = `${el.dataset.tipx ? `<span class="tip-x">${esc(el.dataset.tipx)}</span>` : ""}<b>${esc(d.t)}</b><q>${esc(d.q)}</q>${d.note ? `<span class="tip-note">${esc(d.note)}</span>` : ""}<cite>TheStrat docs · <a href="https://thestrat.ai/docs/${esc(d.src)}/" target="_blank" rel="noopener">Read the full definition on thestrat.ai ↗</a></cite>`;
+  tip.innerHTML = `${el.dataset.tipx ? `<span class="tip-x">${esc(el.dataset.tipx)}</span>` : ""}<b>${esc(d.t)}</b><q>${esc(d.q)}</q>${d.note ? `<span class="tip-note">${esc(d.note)}</span>` : ""}<cite>TheStrat docs · <a href="https://thestrat.ai/docs/${esc(d.src)}/" target="_blank" rel="noopener">Read the full definition on thestrat.ai</a></cite>`;
   tip.hidden = false;
   const r = el.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
   let x = Math.min(Math.max(8, r.left + r.width / 2 - tw / 2), innerWidth - tw - 8);
@@ -1520,7 +1534,7 @@ function startOwner(data) {
   const old = $("#keysBtn"), btn = old.cloneNode(false);
   old.replaceWith(btn);
   btn.hidden = false;
-  btn.textContent = "LOCK 🔒";
+  btn.innerHTML = `${ICON.lock}<span>Lock</span>`;
   btn.title = "Forget the owner password on this device";
   btn.addEventListener("click", () => { local.set(PW_KEY, ""); location.reload(); });
   data.source = `${data.source} · owner access`;

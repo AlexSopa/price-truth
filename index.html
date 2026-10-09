@@ -22,15 +22,14 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=JetBrains+Mono:wght@400..600&family=Space+Grotesk:wght@500..700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=8" />
   <script src="vendor/d3.min.js" defer></script>
   <script src="vendor/topojson-client.min.js" defer></script>
-  <script type="module" src="app.js?v=4"></script>
+  <script type="module" src="app.js?v=5"></script>
 </head>
 <body data-sensor="normal">
   <div class="gate" id="gate" hidden role="dialog" aria-modal="true" aria-labelledby="gateTitle">
     <div class="gate-card">
-      <div class="gate-k">GOD'S EYE VIEW // PRICE TRUTH</div>
       <h2 id="gateTitle">Personal use only</h2>
       <p>This is a free, non-commercial education project. It shows TheStrat bar labels (1, 2U, 2D, 3) worked out from public market data. It does not sell, license or hand out market data.</p>
       <ul>
@@ -38,23 +37,22 @@
         <li>I will not copy, resell or redistribute what it shows.</li>
         <li>I understand it is not investment advice. BUY / SELL here only names who controls the price bar.</li>
       </ul>
-      <p class="gate-fine">Market data belongs to its owners. Price action terms are defined in the TheStrat docs at <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">thestrat.ai/docs ↗</a>.</p>
+      <p class="gate-fine">Market data belongs to its owners. Price action terms are defined in the TheStrat docs at <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">thestrat.ai/docs</a>.</p>
       <button class="share" id="gateAgree" type="button">I AGREE · PERSONAL USE</button>
     </div>
   </div>
 
   <div class="gate keygate" id="keygate" hidden role="dialog" aria-modal="true" aria-labelledby="kgTitle">
     <form class="gate-card wide" id="kgForm" autocomplete="off">
-      <div class="gate-k">GOD'S EYE VIEW // PRICE TRUTH // FREE · OPEN SOURCE</div>
       <img class="kg-shot" src="og.png" alt="The God's Eye View globe: countries colored by buying and selling, with money flowing between them" width="1200" height="630">
-      <h2 id="kgTitle">A spy satellite for the world's money.</h2>
+      <h2 id="kgTitle">See it live in 3 steps.</h2>
       <p>Every major stock market, bond market and sector on Earth, plus gold, oil and bitcoin, read with TheStrat. See where buyers and sellers really are on the day, week, month, quarter and year.</p>
       <p class="kg-msg" id="kgMsg" role="alert" hidden></p>
       <ol class="steps">
         <li><b>Make a free Twelve Data account</b> (email only, no card). Copy the API key from your dashboard.
           <span class="keylinks">
-            <a href="https://twelvedata.com/register" target="_blank" rel="noopener">Twelve Data ↗<small>recommended · covers every market</small></a>
-            <a href="https://site.financialmodelingprep.com/register" target="_blank" rel="noopener">+ FMP ↗<small>optional · faster, but the free plan skips some markets</small></a>
+            <a href="https://twelvedata.com/register" target="_blank" rel="noopener"><span>Twelve Data <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></span><small>Recommended. Covers every market.</small></a>
+            <a href="https://site.financialmodelingprep.com/register" target="_blank" rel="noopener">Add FMP (optional)<small>Faster, but its free plan skips some markets.</small></a>
           </span>
         </li>
         <li><b>Paste it here.</b>
@@ -69,29 +67,30 @@
         </li>
       </ol>
       <div class="kg-actions">
-        <button class="share go" id="kgGo" type="submit" disabled>LAUNCH GOD'S EYE VIEW ▶</button>
-        <button class="share ghost" id="kgCancel" type="button" hidden>CANCEL</button>
+        <button class="share go" id="kgGo" type="submit" disabled><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 5v14l11-7z" fill="currentColor" stroke="none"/></svg><span>Launch God's Eye View</span></button>
+        <button class="share ghost" id="kgCancel" type="button" hidden>Cancel</button>
       </div>
       <p class="kg-why"><b>Why a key?</b> Sharing market data costs money. With your own free key the data comes straight to you, and this site stays free.</p>
       <details class="owner" id="owner" hidden>
-        <summary>Owner access 🔒</summary>
+        <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Owner access</summary>
         <div class="owner-row">
           <input id="ownerPass" type="password" autocomplete="current-password" placeholder="owner password">
-          <button class="share ghost" id="ownerGo" type="button">UNLOCK</button>
+          <button class="share ghost" id="ownerGo" type="button">Unlock</button>
         </div>
         <label class="check"><input type="checkbox" id="ownerRemember"> Remember on this device</label>
         <span class="owner-msg" id="ownerMsg" role="status"></span>
       </details>
-      <p class="gate-fine">Your browser fetches the data straight from your provider with your key. Nothing passes through this site. Your key and the data stay on this device. <a href="https://github.com/AlexSopa/price-truth" target="_blank" rel="noopener">Open source ↗</a> · Price action terms: <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">thestrat.ai/docs ↗</a></p>
+      <p class="gate-fine">Your browser fetches the data straight from your provider with your key. Nothing passes through this site. Your key and the data stay on this device. <a href="https://github.com/AlexSopa/price-truth" target="_blank" rel="noopener">Open source</a>. Price action terms: <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">thestrat.ai/docs</a>.</p>
     </form>
   </div>
 
   <div id="boot" class="boot" aria-hidden="true"><pre id="bootlog"></pre></div>
 
   <div class="banner">
-    <span>GOD'S EYE VIEW</span><span class="sep">//</span><span>PRICE TRUTH</span><span class="sep">//</span>
-    <span id="srcTag">SOURCE: YOUR OWN DATA KEY</span><span class="sep">//</span><span id="asof">ACQUIRING…</span><span class="sep">//</span>
-    <a href="https://github.com/AlexSopa/price-truth" target="_blank" rel="noopener">FREE · OPEN SOURCE ↗</a>
+    <span class="b-brand">GOD'S EYE VIEW</span>
+    <span id="srcTag">SOURCE: YOUR OWN DATA KEY</span>
+    <span id="asof">ACQUIRING…</span>
+    <a href="https://github.com/AlexSopa/price-truth" target="_blank" rel="noopener">Free and open source <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
   </div>
 
   <header class="bar">
@@ -102,10 +101,10 @@
     </div>
     <div class="meta" id="tracking"></div>
     <div class="actions">
-      <button class="share ghost" id="refreshBtn" type="button" hidden title="Load fresh data with your key">REFRESH ⟳</button>
-      <button class="share ghost" id="keysBtn" type="button" hidden title="Change your data key">DATA KEY</button>
+      <button class="share ghost" id="refreshBtn" type="button" hidden title="Load fresh data with your key"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg><span>Refresh</span></button>
+      <button class="share ghost" id="keysBtn" type="button" hidden title="Change your data key">Data key</button>
       <div class="clip-wrap">
-        <button class="share ghost" id="clip" type="button" aria-haspopup="true">SAVE CLIP ⤓</button>
+        <button class="share ghost" id="clip" type="button" aria-haspopup="true"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg><span>Save clip</span></button>
         <div class="clip-menu" id="clipMenu" hidden>
           <button data-kind="page">PAGE <small>record this tab as you see it · STOP to end</small></button>
           <button data-kind="video">VIDEO <small>this view · 9:16 · 8s</small></button>
@@ -114,7 +113,7 @@
           <p>VIDEO and GIF record the current view. If a replay is running, they record the replay.</p>
         </div>
       </div>
-      <button class="share" id="share" type="button">SHARE INTEL ↗</button>
+      <button class="share" id="share" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg><span>Share</span></button>
     </div>
   </header>
 
@@ -122,16 +121,16 @@
   <nav class="toolbar" aria-label="View controls">
     <div class="seg" id="tfSeg" role="group" aria-label="Timeframe"></div>
     <div class="seg" id="assetSeg" role="group" aria-label="Asset">
-      <button data-v="stocks">STOCKS</button><button data-v="bonds">BONDS</button>
+      <button data-v="stocks">Stocks</button><button data-v="bonds">Bonds</button>
     </div>
     <div class="seg" id="sensorSeg" role="group" aria-label="Sensor mode">
-      <button data-v="normal">NORMAL</button><button data-v="flir">FLIR</button><button data-v="nvg">NVG</button>
+      <button data-v="normal">Normal</button><button data-v="flir">FLIR</button><button data-v="nvg">NVG</button>
     </div>
     <div class="seg" id="viewSeg" role="group" aria-label="Map view (key G)">
-      <button data-v="globe">GLOBE</button><button data-v="flat">FLAT</button>
+      <button data-v="globe">Globe</button><button data-v="flat">Flat</button>
     </div>
     <div class="seg" id="flowSeg" role="group" aria-label="Money flow arcs (key F)">
-      <button data-v="control" title="Sellers in control → buyers in control">FLOW: CONTROL</button><button data-v="reversal" title="Reversing down → reversing up">REVERSALS</button><button data-v="off">OFF</button>
+      <button data-v="control" title="Sellers in control → buyers in control">Money flow</button><button data-v="reversal" title="Reversing down → reversing up">Reversals</button><button data-v="off">Off</button>
     </div>
   </nav>
 
@@ -142,16 +141,16 @@
       <div class="hud tr"><div><span class="rec"></span>REC</div><div id="hudTf">TF DAY</div><div id="hudReplay" class="hud-replay"></div></div>
       <div class="hud-headline" id="hudHeadline"></div>
       <div class="replay-bar">
-        <button class="replay" id="replayBtn" type="button">▶ REPLAY</button>
-        <div class="seg mini" id="stepSeg" role="group" aria-label="Replay step"><button data-v="bar" title="One frame per completed bar">BY BAR</button><button data-v="day" title="The bar in force, day by day">BY DAY</button></div>
+        <button class="replay" id="replayBtn" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 5v14l11-7z" fill="currentColor" stroke="none"/></svg><span>Replay</span></button>
+        <div class="seg mini" id="stepSeg" role="group" aria-label="Replay step"><button data-v="bar" title="One frame per completed bar">By bar</button><button data-v="day" title="The bar in force, day by day">By day</button></div>
         <div class="seg mini" id="rangeSeg" role="group" aria-label="Replay range"><button data-v="3M">3M</button><button data-v="6M">6M</button><button data-v="1Y">1Y</button></div>
       </div>
       <div class="replay-prog"><i id="replayProg"></i></div>
       <div class="zoom" role="group" aria-label="Zoom">
-        <button id="zoomIn" type="button" aria-label="Zoom in">+</button>
+        <button id="zoomIn" type="button" aria-label="Zoom in"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
         <span id="zoomLvl">1.0×</span>
-        <button id="zoomOut" type="button" aria-label="Zoom out">−</button>
-        <button id="zoomReset" type="button" aria-label="Reset zoom">⟲</button>
+        <button id="zoomOut" type="button" aria-label="Zoom out"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg></button>
+        <button id="zoomReset" type="button" aria-label="Reset zoom"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button>
       </div>
       <div class="hud bl">
         <div class="legend"><span>SELLING</span><i id="legendBar"></i><span>BUYING</span></div>
@@ -195,15 +194,15 @@
     </div>
     <div class="rev-tfs" id="revTfs"></div>
     <div class="rev-cols">
-      <div><h3 class="rev-h up">↑ UP · reversals and continuations</h3><div id="revUp"></div></div>
-      <div><h3 class="rev-h down">↓ DOWN · reversals and continuations</h3><div id="revDown"></div></div>
+      <div><h3 class="rev-h up">Turning up</h3><div id="revUp"></div></div>
+      <div><h3 class="rev-h down">Turning down</h3><div id="revDown"></div></div>
     </div>
   </section>
 
   <section class="panel">
     <div class="panel-head">
       <h2>Global Pulse</h2>
-      <span class="panel-meta">LAST 60 SESSIONS · EVERY MARKET WE TRACK · GREEN = BROKE YESTERDAY'S HIGH · RED = BROKE YESTERDAY'S LOW</span>
+      <span class="panel-meta">The last 60 sessions. Green: markets that broke yesterday's high. Red: yesterday's low.</span>
     </div>
     <div class="pulse" id="pulse"></div>
   </section>
@@ -211,13 +210,13 @@
   <section class="panel">
     <div class="panel-head">
       <h2>World Sectors &amp; Macro</h2>
-      <span class="panel-meta">GLOBAL SECTOR ETFS · GOLD · OIL · COPPER · DOLLAR · BITCOIN</span>
+      <span class="panel-meta">World sector funds, gold, oil, copper, the dollar and bitcoin.</span>
     </div>
     <div class="grid small" id="sectorGrid"></div>
   </section>
 
   <section class="panel explain">
-    <div class="panel-head"><h2>How to read this</h2><span class="panel-meta">NO EXPERIENCE NEEDED · FULL DEFINITIONS: <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">THESTRAT.AI/DOCS ↗</a></span></div>
+    <div class="panel-head"><h2>How to read this</h2><span class="panel-meta">No experience needed. Full definitions at <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">thestrat.ai/docs</a>.</span></div>
     <p class="lead">Every market makes one bar per period: a day, a week, a month, a quarter, a year. We ask only one question: <b>did price break last period's high, its low, both, or neither?</b> That is TheStrat. No opinions. No news. Just what price did.</p>
     <div class="cards" id="howCards"></div>
     <div class="regimes">
@@ -240,16 +239,16 @@
     <div class="clip-card">
       <div id="clipPreview"></div>
       <div class="clip-actions">
-        <a class="share" id="clipSave" download>SAVE ⤓</a>
-        <button class="share ghost" id="clipShare" type="button" hidden>SHARE ↗</button>
-        <button class="share ghost" id="clipClose" type="button">CLOSE</button>
+        <a class="share" id="clipSave" download><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg><span>Save</span></a>
+        <button class="share ghost" id="clipShare" type="button" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg><span>Share</span></button>
+        <button class="share ghost" id="clipClose" type="button">Close</button>
       </div>
     </div>
   </div>
 
   <div class="drawer" id="drawer" hidden>
     <div class="drawer-card" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
-      <button class="close" id="drawerClose" aria-label="Close">✕</button>
+      <button class="close" id="drawerClose" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
       <div id="drawerBody"></div>
     </div>
   </div>
