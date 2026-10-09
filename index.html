@@ -57,6 +57,9 @@
     <div class="seg" id="sensorSeg" role="group" aria-label="Sensor mode">
       <button data-v="normal">NORMAL</button><button data-v="flir">FLIR</button><button data-v="nvg">NVG</button>
     </div>
+    <div class="seg" id="viewSeg" role="group" aria-label="Map view (key G)">
+      <button data-v="globe">GLOBE</button><button data-v="flat">FLAT</button>
+    </div>
     <div class="seg" id="flowSeg" role="group" aria-label="Money flow arcs (key F)">
       <button data-v="control" title="Sellers in control → buyers in control">FLOW: CONTROL</button><button data-v="reversal" title="Reversing down → reversing up">REVERSALS</button><button data-v="off">OFF</button>
     </div>
@@ -83,7 +86,7 @@
       <div class="hud bl">
         <div class="legend"><span>SELLING</span><i id="legendBar"></i><span>BUYING</span></div>
         <div class="hud-dim" id="flowHint"></div>
-        <div class="hud-dim">DRAG TO ROTATE · CLICK A COUNTRY</div>
+        <div class="hud-dim" id="dragHint">DRAG TO ROTATE · CLICK A COUNTRY</div>
       </div>
       <div class="hud br" id="hudTarget"></div>
       <div class="corners"></div><div class="reticle"></div><div class="scan"></div>
@@ -159,7 +162,7 @@
   <footer class="foot">
     <p>Education, not investment advice. Market data from Yahoo Finance, read every hour on trading days. Bars still trading are live and can change until they close. This site publishes TheStrat bar labels and chart shapes, never prices. Not affiliated with Yahoo. Inspired by Bilawal Sidhu's <a href="https://github.com/bilawalsidhu/gods-eye-view" target="_blank" rel="noopener">God's Eye View</a>.</p>
     <p id="footData"></p>
-    <p>Keys: D W M Q Y timeframes · S stocks · B bonds · 1 2 3 sensors · F money flow · + − zoom (or scroll / pinch) · R replay · Esc close.</p>
+    <p>Keys: D W M Q Y timeframes · S stocks · B bonds · 1 2 3 sensors · G globe / flat · F money flow · + − zoom (or scroll / pinch) · R replay · Esc close.</p>
   </footer>
 
   <div class="drawer" id="drawer" hidden>

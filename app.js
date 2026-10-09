@@ -12,7 +12,7 @@ const WORLD_URL = "vendor/countries-110m.json";
 const RELAYS = []; // Add your own CORS relay URL prefixes here to allow ?relay= live mode on the public site.
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-const state = { tf: "D", asset: "stocks", sensor: "normal", flow: "control", replayStep: "bar", replayRange: null, data: null, views: {}, focus: null, hover: null, mine: null, frame: null };
+const state = { tf: "D", asset: "stocks", sensor: "normal", flow: "control", view: "globe", replayStep: "bar", replayRange: null, data: null, views: {}, focus: null, hover: null, mine: null, frame: null };
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -556,15 +556,35 @@ function initGlobe(world, start) {
   const ctx = canvas.getContext("2d");
   const features = topojson.feature(world, world.objects.countries).features;
   const byIso = new Map(Object.entries(COUNTRIES).filter(([, c]) => c.iso).map(([code, c]) => [c.iso, code]));
-  const proj = d3.geoOrthographic().clipAngle(90).precision(0.6);
-  const path = d3.geoPath(proj, ctx);
+  const globeProj = d3.geoOrthographic().clipAngle(90).precision(0.6);
+  const flatProj = d3.geoNaturalEarth1().rotate([-10, 0]).precision(0.6);
+  let proj = globeProj, path = d3.geoPath(proj, ctx);
+  const isFlat = () => state.view === "flat";
+  function useView() {
+    const p = isFlat() ? flatProj : globeProj;
+    if (p !== proj) { proj = p; path = d3.geoPath(proj, ctx); }
+  }
   const grat = d3.geoGraticule10();
   const at = start && COUNTRIES[start]?.at;
   let rot = at ? [-at[0] + 25, -at[1] * 0.6, 0] : [-10, -25, 0];
   let spin = !reduceMotion, anim = null, w = 0, h = 0, resumeAt = 0, dirty = true;
-  let zoom = 1, zoomAnim = null, base = 1;
+  let zoom = 1, zoomAnim = null, base = 1, flatBase = 1, flatT = [0, 0], pan = [0, 0], panTarget = null, panHome = false;
   const ZMIN = 1, ZMAX = 6;
-  const setZoom = (z) => { zoom = Math.max(ZMIN, Math.min(ZMAX, z)); proj.scale(base * zoom); dirty = true; $("#zoomLvl").textContent = `${zoom.toFixed(1)}×`; };
+  // Globe: zoom = scale. Flat map: zoom about the canvas centre, plus a pan offset in pixels.
+  function applyScale() {
+    globeProj.translate([w / 2, h / 2]).scale(base * zoom);
+    const lim = (w * zoom) / 2;
+    pan = [Math.max(-lim, Math.min(lim, pan[0])), Math.max(-lim, Math.min(lim, pan[1]))];
+    flatProj.scale(flatBase * zoom).translate([w / 2 + (flatT[0] - w / 2) * zoom + pan[0], h / 2 + (flatT[1] - h / 2) * zoom + pan[1]]);
+    dirty = true;
+  }
+  const setZoom = (z) => {
+    const nz = Math.max(ZMIN, Math.min(ZMAX, z));
+    pan = pan.map((v) => (v * nz) / zoom);
+    zoom = nz;
+    applyScale();
+    $("#zoomLvl").textContent = `${zoom.toFixed(1)}×`;
+  };
   let visible = true, lastDraw = 0, lastHud = 0, lastT = performance.now();
 
   function resize() {
@@ -574,8 +594,9 @@ function initGlobe(world, start) {
     canvas.width = w * dpr; canvas.height = h * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     base = Math.min(w, h) * 0.42;
-    proj.translate([w / 2, h / 2]).scale(base * zoom);
-    dirty = true;
+    flatProj.fitExtent([[12, 24], [w - 12, h - 24]], { type: "Sphere" });
+    flatBase = flatProj.scale(); flatT = flatProj.translate();
+    applyScale();
   }
   new ResizeObserver(resize).observe(canvas);
   new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(canvas);
@@ -608,9 +629,19 @@ function initGlobe(world, start) {
     const list = currentFlows();
     if (!list.length) return;
     const lo = heat(-1), hi = heat(1);
+    const flat = isFlat();
     for (const f of list) {
+      let pos;
+      if (flat) {
+        // Flat map: a curve that bows upward between the two countries.
+        const a0 = proj(f.a.at), b0 = proj(f.b.at);
+        const c = [(a0[0] + b0[0]) / 2, (a0[1] + b0[1]) / 2 - Math.hypot(b0[0] - a0[0], b0[1] - a0[1]) * 0.32];
+        pos = (u) => [(1 - u) ** 2 * a0[0] + 2 * u * (1 - u) * c[0] + u * u * b0[0], (1 - u) ** 2 * a0[1] + 2 * u * (1 - u) * c[1] + u * u * b0[1], true];
+      } else {
+        pos = (u) => lift(f.interp(u), f.h * Math.sin(Math.PI * u));
+      }
       const pts = [];
-      for (let i = 0; i <= 40; i++) { const u = i / 40; pts.push(lift(f.interp(u), f.h * Math.sin(Math.PI * u))); }
+      for (let i = 0; i <= 40; i++) pts.push(pos(i / 40));
       const a = pts[0], b = pts[40];
       const grad = ctx.createLinearGradient(a[0], a[1], b[0], b[1]);
       grad.addColorStop(0, d3.color(lo).copy({ opacity: 0.55 }).formatRgb());
@@ -625,7 +656,7 @@ function initGlobe(world, start) {
       const n = 2 + Math.round(f.w * 3);
       for (let k = 0; k < n; k++) {
         const u = reduceMotion ? (k + 0.5) / n : ((t * 0.00022) / (0.35 + f.dist) + f.phase + k / n) % 1;
-        const [x, y, vis] = lift(f.interp(u), f.h * Math.sin(Math.PI * u));
+        const [x, y, vis] = pos(u);
         if (!vis) continue;
         const c = d3.interpolateRgb(lo, hi)(u);
         ctx.beginPath(); ctx.arc(x, y, 5, 0, 2 * Math.PI); ctx.fillStyle = d3.color(c).copy({ opacity: 0.18 }).formatRgb(); ctx.fill();
@@ -636,12 +667,16 @@ function initGlobe(world, start) {
 
   function draw(t) {
     const P = SENSOR[state.sensor];
-    proj.rotate(rot);
+    useView();
+    const flat = isFlat();
+    if (!flat) globeProj.rotate(rot);
     ctx.clearRect(0, 0, w, h);
-    const [cx, cy] = proj.translate(), R = proj.scale();
-    const glow = ctx.createRadialGradient(cx, cy, R * 0.95, cx, cy, R * 1.18);
-    glow.addColorStop(0, P.glow); glow.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, R * 1.18, 0, 2 * Math.PI); ctx.fill();
+    if (!flat) {
+      const [cx, cy] = proj.translate(), R = proj.scale();
+      const glow = ctx.createRadialGradient(cx, cy, R * 0.95, cx, cy, R * 1.18);
+      glow.addColorStop(0, P.glow); glow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, R * 1.18, 0, 2 * Math.PI); ctx.fill();
+    }
     ctx.beginPath(); path({ type: "Sphere" }); ctx.fillStyle = P.ocean; ctx.fill();
     ctx.beginPath(); path(grat); ctx.strokeStyle = P.grat; ctx.lineWidth = 0.6; ctx.stroke();
 
@@ -667,7 +702,7 @@ function initGlobe(world, start) {
     let k = 0;
     for (const [code, v] of Object.entries(state.views)) {
       k++;
-      if (!v.at || d3.geoDistance(v.at, center) > 1.45) continue;
+      if (!v.at || (!flat && d3.geoDistance(v.at, center) > 1.45)) continue;
       const g = v.groups[state.asset];
       const s = scoreOf(code);
       if (!g || s === undefined) continue;
@@ -689,7 +724,7 @@ function initGlobe(world, start) {
 
     // Target reticle on the focused country.
     const fv = state.focus && state.views[state.focus];
-    if (fv?.at && d3.geoDistance(fv.at, center) < 1.45) {
+    if (fv?.at && (flat || d3.geoDistance(fv.at, center) < 1.45)) {
       const [x, y] = proj(fv.at), s = 22;
       ctx.strokeStyle = P.text; ctx.lineWidth = 1.2;
       for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
@@ -698,7 +733,7 @@ function initGlobe(world, start) {
     }
     if (t - lastHud > 250) {
       lastHud = t;
-      $("#hudOrbit").textContent = `SAT-01 // LAT ${(-rot[1]).toFixed(1)} LON ${(((-rot[0] + 540) % 360) - 180).toFixed(1)}`;
+      $("#hudOrbit").textContent = flat ? `SAT-01 // FLAT MAP · NATURAL EARTH · ${zoom.toFixed(1)}×` : `SAT-01 // LAT ${(-rot[1]).toFixed(1)} LON ${(((-rot[0] + 540) % 360) - 180).toFixed(1)}`;
     }
   }
 
@@ -718,8 +753,19 @@ function initGlobe(world, start) {
       setZoom(zoomAnim.from + (zoomAnim.to - zoomAnim.from) * d3.easeCubicInOut(p));
       if (p >= 1) zoomAnim = null;
     }
-    if (anim) {
-      // rotation handled above
+    if (isFlat() && panTarget) {
+      const p = flatProj(panTarget), dx = w / 2 - p[0], dy = h / 2 - p[1];
+      pan = [pan[0] + dx * (reduceMotion ? 1 : 0.18), pan[1] + dy * (reduceMotion ? 1 : 0.18)];
+      applyScale();
+      if (Math.hypot(dx, dy) < 0.5) panTarget = null;
+    }
+    if (panHome) {
+      pan = pan.map((v) => v * (reduceMotion ? 0 : 0.8));
+      applyScale();
+      if (Math.hypot(...pan) < 0.5) { pan = [0, 0]; panHome = false; }
+    }
+    if (anim || isFlat()) {
+      // rotation handled above; the flat map does not spin
     } else if (spin && t > resumeAt) {
       rot[0] = (rot[0] + 0.0042 * dt) % 360;
       dirty = true;
@@ -737,8 +783,9 @@ function initGlobe(world, start) {
   // Mouse: d3.drag rotates freely. Touch is handled below so a vertical swipe still scrolls the page.
   d3.select(canvas).call(d3.drag()
     .filter((e) => e.type === "mousedown" && !e.button)
-    .on("start", () => { anim = null; resumeAt = Infinity; })
+    .on("start", () => { anim = null; panTarget = null; panHome = false; resumeAt = Infinity; })
     .on("drag", (e) => {
+      if (isFlat()) { pan = [pan[0] + e.dx, pan[1] + e.dy]; applyScale(); return; }
       const k = 70 / proj.scale();
       rot = [rot[0] + e.dx * k, Math.max(-80, Math.min(80, rot[1] - e.dy * k)), 0];
       dirty = true;
@@ -749,7 +796,7 @@ function initGlobe(world, start) {
   function countryAt(evt) {
     const r = canvas.getBoundingClientRect();
     const ll = proj.invert([evt.clientX - r.left, evt.clientY - r.top]);
-    if (!ll || d3.geoDistance(ll, [-rot[0], -rot[1]]) > Math.PI / 2) return null;
+    if (!ll || (!isFlat() && d3.geoDistance(ll, [-rot[0], -rot[1]]) > Math.PI / 2)) return null;
     // Small places (Hong Kong, Singapore) have no polygon at this scale: snap to the nearest marker.
     for (const [code, v] of Object.entries(state.views)) if (v.at && d3.geoDistance(ll, v.at) < 0.035) return code;
     const f = features.find((f) => byIso.has(f.id) && d3.geoContains(f, ll));
@@ -780,7 +827,8 @@ function initGlobe(world, start) {
     const prev = touches.get(e.pointerId);
     touches.set(e.pointerId, [e.clientX, e.clientY]);
     if (touches.size === 1) {
-      anim = null; resumeAt = performance.now() + 5000;
+      anim = null; panTarget = null; panHome = false; resumeAt = performance.now() + 5000;
+      if (isFlat()) { pan = [pan[0] + (e.clientX - prev[0]), pan[1]]; applyScale(); return; }
       rot = [rot[0] + (e.clientX - prev[0]) * (70 / proj.scale()), rot[1], 0];
       dirty = true;
       return;
@@ -795,7 +843,7 @@ function initGlobe(world, start) {
   canvas.addEventListener("pointercancel", lift2);
   $("#zoomIn").addEventListener("click", () => { zoomAnim = { t0: performance.now(), from: zoom, to: zoom * 1.6 }; });
   $("#zoomOut").addEventListener("click", () => { zoomAnim = { t0: performance.now(), from: zoom, to: zoom / 1.6 }; });
-  $("#zoomReset").addEventListener("click", () => { zoomAnim = { t0: performance.now(), from: zoom, to: 1 }; });
+  $("#zoomReset").addEventListener("click", () => { panTarget = null; panHome = true; zoomAnim = { t0: performance.now(), from: zoom, to: 1 }; });
 
   return {
     redraw() { dirty = true; },
@@ -804,6 +852,8 @@ function initGlobe(world, start) {
       const v = code && state.views[code];
       if (!v?.at) { resumeAt = performance.now() + 3000; return; }
       resumeAt = Infinity;
+      panHome = false;
+      panTarget = v.at; // used by the flat map
       const to = [-v.at[0], -v.at[1], 0];
       const from = [...rot];
       while (to[0] - from[0] > 180) to[0] -= 360;
@@ -869,11 +919,20 @@ async function makeCard() {
   x.fillStyle = v("--accent"); x.fillRect(0, 0, W, 60);
   x.fillStyle = v("--accent-fg"); x.font = "600 22px 'JetBrains Mono', monospace"; x.textAlign = "center";
   x.fillText(`GOD'S EYE VIEW // PRICE TRUTH // ${TF_HUD[state.tf]} BARS // ${state.data.generatedAt.slice(0, 10)}`, W / 2, 39);
-  const g = $("#globe"), s = Math.min(g.width, g.height);
-  x.drawImage(g, (g.width - s) / 2, (g.height - s) / 2, s, s, 160, 70, 760, 760);
+  const g = $("#globe");
+  let imgBottom;
+  if (state.view === "flat") {
+    const dh = (960 * g.height) / g.width;
+    x.drawImage(g, 0, 0, g.width, g.height, 60, 120, 960, dh);
+    imgBottom = 120 + dh;
+  } else {
+    const s = Math.min(g.width, g.height);
+    x.drawImage(g, (g.width - s) / 2, (g.height - s) / 2, s, s, 160, 70, 760, 760);
+    imgBottom = 830;
+  }
   x.textAlign = "left";
   x.fillStyle = v("--fg"); x.font = "700 52px 'Space Grotesk', sans-serif";
-  const y = wrapText(x, $("#headline").textContent, 60, 900, 960, 60);
+  const y = wrapText(x, $("#headline").textContent, 60, imgBottom + 70, 960, 60);
   x.font = "700 32px 'Space Grotesk', sans-serif";
   topCalls().forEach((call, i) => {
     x.fillStyle = call.verdict === "BUY" ? v("--up") : v("--down");
@@ -907,7 +966,7 @@ function setPressed(segId, v) {
 }
 
 function writeHash() {
-  history.replaceState(null, "", `${location.pathname}${location.search}#tf=${state.tf}&asset=${state.asset}&sensor=${state.sensor}&flow=${state.flow}${state.focus ? `&c=${state.focus}` : ""}`);
+  history.replaceState(null, "", `${location.pathname}${location.search}#tf=${state.tf}&asset=${state.asset}&sensor=${state.sensor}&flow=${state.flow}&view=${state.view}${state.focus ? `&c=${state.focus}` : ""}`);
 }
 
 function update(patch = {}) {
@@ -920,6 +979,9 @@ function update(patch = {}) {
   $("#hudMode").textContent = `SENSOR ${state.sensor === "flir" ? "FLIR · BUYING RUNS HOT" : state.sensor === "nvg" ? "NVG" : "NORMAL"}`;
   $("#hudTf").textContent = `TF ${TF_HUD[state.tf]} · ${state.asset.toUpperCase()}`;
   setPressed("flowSeg", state.flow);
+  setPressed("viewSeg", state.view);
+  document.body.dataset.view = state.view;
+  $("#dragHint").textContent = state.view === "flat" ? "DRAG TO PAN · CLICK A COUNTRY" : "DRAG TO ROTATE · CLICK A COUNTRY";
   $("#flowHint").textContent = state.flow === "reversal" ? "ARCS: REVERSING DOWN → REVERSING UP" : state.flow === "control" ? "ARCS: MONEY LEAVING SELLERS → BUYERS" : "";
   renderLegend(); renderIntel(); renderCountries(); renderReversals(); renderReplayControls();
   globe?.redraw();
@@ -946,6 +1008,7 @@ function wireControls() {
   $("#stepSeg").addEventListener("click", (e) => { if (e.target.dataset.v && !e.target.disabled) { stopReplay(); state.replayStep = e.target.dataset.v; renderReplayControls(); } });
   $("#rangeSeg").addEventListener("click", (e) => { if (e.target.dataset.v) { stopReplay(); state.replayRange = e.target.dataset.v; renderReplayControls(); } });
   $("#flowSeg").addEventListener("click", (e) => e.target.dataset.v && update({ flow: e.target.dataset.v }));
+  $("#viewSeg").addEventListener("click", (e) => e.target.dataset.v && update({ view: e.target.dataset.v }));
   document.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey || e.target.matches("input, textarea")) return;
     const k = e.key.toUpperCase();
@@ -957,6 +1020,7 @@ function wireControls() {
     else if (k === "2") update({ sensor: "flir" });
     else if (k === "3") update({ sensor: "nvg" });
     else if (k === "R") startReplay();
+    else if (k === "G") update({ view: state.view === "flat" ? "globe" : "flat" });
     else if (k === "F") update({ flow: { control: "reversal", reversal: "off", off: "control" }[state.flow] });
     else if (k === "+" || k === "=") $("#zoomIn").click();
     else if (k === "-") $("#zoomOut").click();
@@ -970,6 +1034,7 @@ function readHash() {
   if (["stocks", "bonds"].includes(p.get("asset"))) out.asset = p.get("asset");
   if (["normal", "flir", "nvg"].includes(p.get("sensor"))) out.sensor = p.get("sensor");
   if (["control", "reversal", "off"].includes(p.get("flow"))) out.flow = p.get("flow");
+  if (["globe", "flat"].includes(p.get("view"))) out.view = p.get("view");
   return { patch: out, country: p.get("c")?.toUpperCase() };
 }
 

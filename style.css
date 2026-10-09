@@ -83,6 +83,7 @@ a { color: var(--accent); }
 .replay { background: var(--panel-2); color: var(--fg); border: 1px solid var(--border-hi); border-radius: var(--r); padding: 5px 12px; font: 600 10px var(--mono); letter-spacing: 0.1em; }
 .replay:hover { border-color: var(--accent); color: var(--accent); }
 .hud-replay { color: var(--accent); font-weight: 600; }
+body[data-view="flat"] .reticle { display: none; }
 .zoom { position: absolute; z-index: 3; right: 14px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .zoom button { width: 30px; height: 30px; background: var(--panel-2); color: var(--fg); border: 1px solid var(--border-hi); border-radius: var(--r); font: 600 15px var(--mono); }
 .zoom button:hover { border-color: var(--accent); color: var(--accent); }
