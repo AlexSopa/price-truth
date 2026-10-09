@@ -46,27 +46,33 @@
   <div class="gate keygate" id="keygate" hidden role="dialog" aria-modal="true" aria-labelledby="kgTitle">
     <form class="gate-card wide" id="kgForm" autocomplete="off">
       <div class="gate-k">GOD'S EYE VIEW // PRICE TRUTH // FREE · OPEN SOURCE</div>
+      <img class="kg-shot" src="og.png" alt="The God's Eye View globe: countries colored by buying and selling, with money flowing between them" width="1200" height="630">
       <h2 id="kgTitle">A spy satellite for the world's money.</h2>
       <p>Every major stock market, bond market and sector on Earth, plus gold, oil and bitcoin, read with TheStrat. See where buyers and sellers really are on the day, week, month, quarter and year.</p>
       <p class="kg-msg" id="kgMsg" role="alert" hidden></p>
       <ol class="steps">
-        <li><b>Get a free data key.</b> 1 minute, email only, no card.
+        <li><b>Make a free Twelve Data account</b> (email only, no card). Copy the API key from your dashboard.
           <span class="keylinks">
-            <a href="https://site.financialmodelingprep.com/register" target="_blank" rel="noopener">FMP ↗<small>fastest · loads in about 1 min</small></a>
-            <a href="https://twelvedata.com/register" target="_blank" rel="noopener">Twelve Data ↗<small>about 10 min the first time</small></a>
+            <a href="https://twelvedata.com/register" target="_blank" rel="noopener">Twelve Data ↗<small>recommended · covers every market</small></a>
+            <a href="https://site.financialmodelingprep.com/register" target="_blank" rel="noopener">+ FMP ↗<small>optional · faster, but the free plan skips some markets</small></a>
           </span>
         </li>
-        <li><b>Paste it here.</b> One key is enough. Both keys load fastest and fill each other's gaps.
+        <li><b>Paste it here.</b>
           <span class="keyfields">
-            <label>FMP key<input id="keyFmp" spellcheck="false" placeholder="paste your FMP key"></label>
-            <label>Twelve Data key<input id="keyTd" spellcheck="false" placeholder="paste your Twelve Data key"></label>
+            <label>Twelve Data key<input id="keyTd" spellcheck="false" autocapitalize="off" autocorrect="off" placeholder="paste your Twelve Data key"></label>
+            <label>FMP key (optional)<input id="keyFmp" spellcheck="false" autocapitalize="off" autocorrect="off" placeholder="paste your FMP key"></label>
           </span>
+          <small class="kg-wait">First load: about 10 minutes on a free Twelve Data key (about 1 minute with both keys). The map fills in while you watch. Next visits open at once.</small>
         </li>
         <li><b>Agree.</b>
           <label class="check"><input type="checkbox" id="kgAgree"> Personal, non-commercial use only. Not investment advice. I will not resell or redistribute what this page shows.</label>
         </li>
       </ol>
-      <button class="share go" id="kgGo" type="submit" disabled>LAUNCH GOD'S EYE VIEW ▶</button>
+      <div class="kg-actions">
+        <button class="share go" id="kgGo" type="submit" disabled>LAUNCH GOD'S EYE VIEW ▶</button>
+        <button class="share ghost" id="kgCancel" type="button" hidden>CANCEL</button>
+      </div>
+      <p class="kg-why"><b>Why a key?</b> Sharing market data costs money. With your own free key the data comes straight to you, and this site stays free.</p>
       <details class="owner" id="owner" hidden>
         <summary>Owner access 🔒</summary>
         <div class="owner-row">

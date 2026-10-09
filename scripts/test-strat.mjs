@@ -120,7 +120,9 @@ const td = PROVIDERS.td.parse({ status: "ok", values: [
 assert.deepEqual(td.bars.map((x) => x.d), ["2026-10-08", "2026-10-09"]);
 assert.equal(td.bars[1].h, 12);
 assert.equal(PROVIDERS.td.parse({ code: 401, message: "**apikey** parameter is incorrect", status: "error" }).auth, true);
-assert.equal(PROVIDERS.td.parse({ code: 429, message: "You have run out of API credits", status: "error" }).limit, true);
+assert.equal(PROVIDERS.td.parse({ code: 429, message: "You have run out of API credits for the current minute.", status: "error" }).limit, "minute");
+assert.equal(PROVIDERS.td.parse({ code: 429, message: "You have run out of API credits for the day.", status: "error" }).limit, "day");
+assert.equal(PROVIDERS.td.parse({ code: 401, message: "**apikey** parameter is incorrect", status: "error" }).error.includes("**"), false);
 const fmp = PROVIDERS.fmp.parse([
   { symbol: "EWJ", date: "2026-10-09", open: 70, high: 71, low: 69, close: 70.5 },
   { symbol: "EWJ", date: "2026-10-08", open: 69, high: 70, low: 68, close: 69.5 },
@@ -128,7 +130,9 @@ const fmp = PROVIDERS.fmp.parse([
 assert.deepEqual(fmp.bars.map((x) => x.d), ["2026-10-08", "2026-10-09"]); // newest-first input, oldest-first output
 assert.equal(PROVIDERS.fmp.parse({ historical: [{ date: "2026-10-09", open: 1, high: 2, low: 0.5, close: 1.5 }] }).bars.length, 1); // legacy shape
 assert.equal(PROVIDERS.fmp.parse({ "Error Message": "Invalid API KEY." }).auth, true);
-assert.equal(PROVIDERS.fmp.parse({ "Error Message": "Limit Reach . Please upgrade your plan" }).limit, true);
+assert.equal(PROVIDERS.fmp.parse({ "Error Message": "Limit Reach . Please upgrade your plan" }).limit, "day");
+assert.equal(PROVIDERS.fmp.parse({ "Error Message": "Limit Reach . Please upgrade your plan" }).skip, false);
+assert.equal(PROVIDERS.fmp.parse({ "Error Message": "Premium Query Parameter: This value is not available under your current subscription" }).skip, true);
 assert.match(PROVIDERS.td.url({ td: "BTC/USD" }, "k", "2021-10-09"), /symbol=BTC%2FUSD/);
 assert.deepEqual(mergeBars([b("2026-10-08", 1, 2, 1, 2), b("2026-10-09", 1, 2, 1, 2)], [b("2026-10-09", 1, 3, 1, 3), b("2026-10-10", 1, 2, 1, 2)]).map((x) => x.h), [2, 3, 2]);
 const at = (iso) => new Date(iso);

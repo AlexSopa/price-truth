@@ -1,7 +1,7 @@
 import { COUNTRIES, BYOK_MARKETS } from "./universe.js?v=4";
 import { TIMEFRAMES, control, continuity, reversal, isTurn, decodeState, periodKey } from "./strat.js?v=4";
 import { buildSignals } from "./signals.js?v=4";
-import { PROVIDERS, loadMarkets, clearCache } from "./byok.js?v=4";
+import { PROVIDERS, loadMarkets } from "./byok.js?v=4";
 import { unseal } from "./vault.js?v=4";
 
 const TF_NAME = { D: "Today", W: "This week", M: "This month", Q: "This quarter", Y: "This year" };
@@ -103,9 +103,14 @@ const hasKey = (k) => !!(k.fmp || k.td);
 const agreed = () => { const t = Number(local.get(GATE_KEY)); return t && Date.now() - t < GATE_DAYS * 864e5; };
 
 // Landing: get a free key, paste it, agree to personal use, launch. Resolves with the keys.
-function keyGate(message = "", vault = null) {
+let gateOpen = false;
+function keyGate(message = "", vault = null, cancellable = false) {
   const gate = $("#keygate"), keys = readKeys();
+  gateOpen = true;
+  $("#kgCancel").hidden = !cancellable;
   $("#owner").hidden = !vault;
+  const linked = readHash().country;
+  if (linked && COUNTRIES[linked]?.name) $("#kgTitle").textContent = `${COUNTRIES[linked].name}: see who controls the money.`;
   $("#keyFmp").value = keys.fmp ?? "";
   $("#keyTd").value = keys.td ?? "";
   $("#kgAgree").checked = !!agreed();
@@ -116,6 +121,10 @@ function keyGate(message = "", vault = null) {
   check();
   gate.hidden = false;
   return new Promise((resolve) => {
+    const close = (value) => { gateOpen = false; gate.hidden = true; document.removeEventListener("keydown", onEsc); resolve(value); };
+    const onEsc = (e) => { if (e.key === "Escape" && cancellable) close(null); };
+    document.addEventListener("keydown", onEsc);
+    $("#kgCancel").onclick = () => close(null);
     $("#ownerGo").onclick = async () => {
       const pw = $("#ownerPass").value;
       if (!pw) return;
@@ -124,8 +133,7 @@ function keyGate(message = "", vault = null) {
       if (!data) { $("#ownerMsg").textContent = "Wrong password."; return; }
       if ($("#ownerRemember").checked) local.set(PW_KEY, pw);
       $("#ownerMsg").textContent = "";
-      gate.hidden = true;
-      resolve({ own: data });
+      close({ own: data });
     };
     $("#kgForm").onsubmit = (e) => {
       e.preventDefault();
@@ -133,8 +141,7 @@ function keyGate(message = "", vault = null) {
       const k = { fmp: $("#keyFmp").value.trim(), td: $("#keyTd").value.trim() };
       saveKeys(k);
       local.set(GATE_KEY, String(Date.now()));
-      gate.hidden = true;
-      resolve({ keys: k });
+      close({ keys: k });
     };
   });
 }
@@ -146,23 +153,30 @@ async function startByok(keys, force = false) {
   const entries = new Map();
   const order = new Map(BYOK_MARKETS.map((m, i) => [m.symbol, i]));
   const providers = Object.keys(PROVIDERS).filter((p) => keys[p]).map((p) => PROVIDERS[p].name).join(" + ");
-  let last = 0, timer = 0;
+  let last = 0, timer = 0, scanned = false, limitHit = [];
+  const cancelled = () => run !== byokRun;
   const emit = (now) => {
-    if (run !== byokRun || !entries.size) return;
+    if (run !== byokRun || !entries.size || !scanned) return;
     clearTimeout(timer);
     const since = performance.now() - last;
     if (!now && since < 1200) { timer = setTimeout(() => emit(true), 1200 - since); return; }
     last = performance.now();
     const list = [...entries.values()].sort((a, b) => order.get(a.meta.symbol) - order.get(b.meta.symbol));
-    applyData(buildSignals(list, `your ${providers} key, loaded in your browser`));
+    const data = buildSignals(list, `your ${providers} key, loaded in your browser`);
+    data.generatedAt = new Date(Math.min(...list.map((e) => e.at))).toISOString(); // oldest fetch time
+    applyData(data);
   };
   $("#loadBar").hidden = false;
   state.loading = true;
+  $("#refreshBtn").disabled = true;
   const { failed } = await loadMarkets(BYOK_MARKETS, keys, {
     force,
-    onMarket(meta, bars, live) { entries.set(meta.symbol, { meta, bars, live }); emit(false); },
-    onProgress({ done, total, symbol, provider, waitMs, finished }) {
+    cancelled,
+    onMarket(meta, bars, live, at) { if (!cancelled()) { entries.set(meta.symbol, { meta, bars, live, at }); emit(false); } },
+    onLimit(p) { limitHit.push(p); },
+    onProgress({ done, total, symbol, provider, waitMs, finished, scanned: sc }) {
       if (run !== byokRun) return;
+      if (sc) { scanned = true; emit(true); }
       $("#loadBar i").style.width = `${(done / total) * 100}%`;
       if (finished) return;
       clearInterval(waitTicker);
@@ -176,22 +190,25 @@ async function startByok(keys, force = false) {
         $("#asof").textContent = `ACQUIRING ${done}/${total}${symbol ? ` · ${symbol} · ${provider.toUpperCase()}` : ""}`;
       }
     },
-    onAuthError(p, msg) {
+    onAuthError(p) {
       if (run !== byokRun) return;
       const k = readKeys(); delete k[p]; saveKeys(k);
-      if (!hasKey(k)) keyGate(`Your ${PROVIDERS[p].name} key was refused (${msg}). Check it and paste it again.`, ownerVault).then(launch);
+      if (!hasKey(k) && !gateOpen) keyGate(`${PROVIDERS[p].name} did not accept this key. Copy it again from your ${PROVIDERS[p].name} dashboard and paste it here.`, ownerVault).then(launch);
     },
   });
   if (run !== byokRun) return;
   emit(true);
   clearInterval(waitTicker);
   state.loading = false;
+  $("#refreshBtn").disabled = false;
   $("#loadBar").hidden = true;
+  const limitMsg = limitHit.length ? `Your free ${limitHit.map((p) => PROVIDERS[p].name).join(" and ")} limit for today is used up. ${limitHit.includes("td") ? "Come back tomorrow" : "Add a Twelve Data key or come back tomorrow"}.` : "";
   if (state.data) {
     state.data.failed = failed;
     renderHeader();
-  } else {
-    keyGate("No data came back. Check your key, or try the other provider.", ownerVault).then(launch);
+    if (limitMsg) $("#asof").textContent = limitMsg.toUpperCase();
+  } else if (!gateOpen) {
+    keyGate(limitMsg || "No data came back. Check that you copied the whole key, or try the other provider.", ownerVault).then(launch);
   }
 }
 
@@ -363,9 +380,9 @@ function insights() {
     if (control(top.tf[tf]).score >= 0.5) out.push(`Strongest world sector: <b>${esc(top.name)}</b> (${S_LABEL[top.tf[tf].s]}).`);
     if (control(bot.tf[tf]).score <= -0.5) out.push(`Weakest world sector: <b>${esc(bot.name)}</b> (${S_LABEL[bot.tf[tf].s]}).`);
   }
-  const gold = state.data.markets.find((m) => m.symbol === "GC=F")?.tf[tf];
+  const gold = state.data.markets.find((m) => m.symbol === "GC=F" || m.symbol === "GLD")?.tf[tf];
   if (gold?.s === "2u" && gold.g > 0) out.push(`<b>Gold</b> is breaking out this ${TF_WORD[tf]}.`);
-  const usd = state.data.markets.find((m) => m.symbol === "DX-Y.NYB")?.tf[tf];
+  const usd = state.data.markets.find((m) => m.symbol === "DX-Y.NYB" || m.symbol === "UUP")?.tf[tf];
   if (usd?.s === "2d" && usd.g < 0) out.push(`The <b>US dollar</b> is breaking down this ${TF_WORD[tf]}.`);
   return out.slice(0, 6);
 }
@@ -486,7 +503,7 @@ const PULSE = { w: 1000, h: 190, mid: 95, pad: 18 };
 function renderPulse() {
   const byDate = new Map();
   for (const m of state.data.markets) {
-    if (m.symbol === "BTC-USD") continue;
+    if (m.symbol === "BTC-USD" || m.symbol === "BTC") continue; // trades 7 days a week
     for (const [d, s] of m.hist) {
       const e = byDate.get(d) ?? { up: 0, down: 0, n: 0 };
       e.n++; if (s === "2u") e.up++; if (s === "2d") e.down++;
@@ -572,7 +589,7 @@ function renderReplayControls() {
   document.querySelector('#stepSeg [data-v="bar"]').disabled = tf === "D" || tf === "Y";
   if (!replayTimer) $("#replayBtn").textContent = `▶ REPLAY ${TF_HUD[tf]} BARS`;
   $("#replayBtn").disabled = !state.data.axis;
-  $("#replayBtn").title = state.data.axis ? "" : "Replay starts after the next hourly update";
+  $("#replayBtn").title = state.data.axis ? "" : "Replay needs the full history; it appears when loading finishes";
 }
 
 let replayTimer = null, replayEnds = 0;
@@ -1276,8 +1293,10 @@ function setPressed(segId, v) {
   document.querySelectorAll(`#${segId} button`).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === v)));
 }
 
+let pendingCountry = null; // a shared #c= link whose country has not loaded yet
 function writeHash() {
-  history.replaceState(null, "", `${location.pathname}${location.search}#tf=${state.tf}&asset=${state.asset}&sensor=${state.sensor}&flow=${state.flow}&view=${state.view}${state.focus ? `&c=${state.focus}` : ""}`);
+  const c = state.focus ?? pendingCountry;
+  history.replaceState(null, "", `${location.pathname}${location.search}#tf=${state.tf}&asset=${state.asset}&sensor=${state.sensor}&flow=${state.flow}&view=${state.view}${c ? `&c=${c}` : ""}`);
 }
 
 function update(patch = {}) {
@@ -1414,6 +1433,7 @@ function applyData(data) {
     renderHow();
     renderPulse();
     const { patch, country } = readHash();
+    pendingCountry = country || null;
     update(patch);
     addEventListener("hashchange", () => {
       const h = readHash();
@@ -1421,11 +1441,11 @@ function applyData(data) {
       if (h.country && h.country !== state.focus) openCountry(h.country);
       else if (!h.country) closeDrawer();
     });
-    if (country && state.views[country]) openCountry(country);
   } else {
     renderPulse();
     update({});
   }
+  if (pendingCountry && state.views[pendingCountry]) { const c = pendingCountry; pendingCountry = null; openCountry(c); }
 }
 
 async function main() {
@@ -1467,9 +1487,9 @@ async function main() {
 
   // Public site: bring your own key.
   $("#keysBtn").hidden = false;
-  $("#keysBtn").addEventListener("click", () => keyGate("", ownerVault).then((r) => { if (r.keys) clearCache().then(() => startByok(r.keys, true)); else launch(r); }));
+  $("#keysBtn").addEventListener("click", () => keyGate("", ownerVault, true).then((r) => { if (r) launch(r); }));
   $("#refreshBtn").hidden = false;
-  $("#refreshBtn").addEventListener("click", () => startByok(readKeys(), true));
+  $("#refreshBtn").addEventListener("click", () => { if (!state.loading) startByok(readKeys(), true); });
   const keys = readKeys();
   launch(hasKey(keys) && agreed() ? { keys } : await keyGate("", ownerVault));
 }
