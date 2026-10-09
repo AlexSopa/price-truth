@@ -38,6 +38,41 @@ const KEY = {
   Y: (d) => d.slice(0, 4),
 };
 
+export const periodKey = (d, tf, sunStart = false) => KEY[tf](d, sunStart);
+
+// One letter per bar state: scenario (1, 2u, 2d, 3) x color (red, flat, green) -> "a".."l". "." = no data.
+const SCEN = ["1", "2u", "2d", "3"];
+export const encodeState = (s, g) => String.fromCharCode(97 + SCEN.indexOf(s) * 3 + (g + 1));
+export function decodeState(ch) {
+  const n = ch ? ch.charCodeAt(0) - 97 : -1;
+  return n >= 0 && n < 12 ? { s: SCEN[Math.floor(n / 3)], g: (n % 3) - 1 } : null;
+}
+
+// Timeline: for each date of a shared axis, the state of the bar in force on that date, per timeframe.
+// A weekly letter on a Wednesday is the week-so-far bar against last week's bar, as it stood that day.
+export function timeline(daily, axis, sunStart = false) {
+  const out = {};
+  for (const tf of TIMEFRAMES) {
+    let i = 0, cur = null, prev = null, code = ".", s = "";
+    for (const d of axis) {
+      while (i < daily.length && daily[i].d <= d) {
+        const b = daily[i++];
+        const k = KEY[tf](b.d, sunStart);
+        if (cur && cur.k === k) {
+          cur.h = Math.max(cur.h, b.h); cur.l = Math.min(cur.l, b.l); cur.c = b.c;
+        } else {
+          prev = cur;
+          cur = { k, o: b.o, h: b.h, l: b.l, c: b.c };
+        }
+        code = prev ? encodeState(scenario(cur, prev), color(cur)) : ".";
+      }
+      s += code;
+    }
+    out[tf] = s;
+  }
+  return out;
+}
+
 // Roll daily bars up into one timeframe. Each output bar keeps its period key in `k`.
 export function aggregate(daily, tf, sunStart = false) {
   const out = [];

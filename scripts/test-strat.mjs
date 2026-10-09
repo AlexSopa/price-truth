@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { scenario, aggregate, analyze, control, continuity, sundayWeek, reversal, spark } from "../strat.js";
+import { scenario, aggregate, analyze, control, continuity, sundayWeek, reversal, spark, timeline, decodeState, encodeState, periodKey } from "../strat.js";
 import { parseChart, isLive } from "../yahoo.js";
 
 const b = (d, o, h, l, c) => ({ d, o, h, l, c });
@@ -87,5 +87,16 @@ assert.deepEqual(sp.c, [250, 999, 0, 749, 749, 749, 0, 0]); // (13-10) * 999 / 4
 assert.deepEqual(sp.s, ["2u", "1"]);
 assert.equal(spark([b("a", 5, 5, 5, 5)]).c.every((v) => v === 0), true); // flat window
 assert.equal(a.spark.D.c.length, 4 * 4);
+
+// Timeline: state of the bar in force on each axis date.
+assert.deepEqual(decodeState(encodeState("2d", -1)), { s: "2d", g: -1 });
+assert.equal(decodeState("."), null);
+const tl = timeline(daily, ["2026-09-29", "2026-09-30", "2026-10-02", "2026-10-05", "2026-10-09"]);
+assert.equal(tl.D[0], "."); // before the first bar
+assert.deepEqual(decodeState(tl.D[2]), { s: "2u", g: 1 }); // 10-02 vs 09-30
+assert.equal(tl.W.slice(0, 3), "..."); // first week has no prior week
+assert.deepEqual(decodeState(tl.W[3]), { s: "2u", g: 1 }); // Monday: week so far H14 L11 already above last week's H13
+assert.deepEqual(decodeState(tl.W[4]), { s: "2u", g: 1 }); // Friday: week H15 L10 vs H13 L9
+assert.equal(periodKey("2026-10-09", "M"), "2026-10");
 
 console.log("strat engine: all tests pass");

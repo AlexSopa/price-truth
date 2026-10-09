@@ -4,7 +4,7 @@ export const chartUrl = (symbol, host = "query1") =>
   `https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5y&interval=1d`;
 
 const fmtCache = new Map();
-function localDate(t, tz) {
+export function localDate(t, tz) {
   if (!fmtCache.has(tz)) fmtCache.set(tz, new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }));
   return fmtCache.get(tz).format(t * 1000);
 }

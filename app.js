@@ -1,5 +1,5 @@
 import { COUNTRIES, MARKETS } from "./universe.js?v=3";
-import { TIMEFRAMES, control, continuity, analyze, reversal } from "./strat.js?v=3";
+import { TIMEFRAMES, control, continuity, analyze, reversal, decodeState, periodKey } from "./strat.js?v=3";
 import { chartUrl, parseChart, isLive } from "./yahoo.js?v=3";
 
 const TF_NAME = { D: "Today", W: "This week", M: "This month", Q: "This quarter", Y: "This year" };
@@ -12,7 +12,7 @@ const WORLD_URL = "vendor/countries-110m.json";
 const RELAYS = []; // Add your own CORS relay URL prefixes here to allow ?relay= live mode on the public site.
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-const state = { tf: "D", asset: "stocks", sensor: "normal", flow: "control", data: null, views: {}, focus: null, hover: null, mine: null, frame: null };
+const state = { tf: "D", asset: "stocks", sensor: "normal", flow: "control", replayStep: "bar", replayRange: null, data: null, views: {}, focus: null, hover: null, mine: null, frame: null };
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -115,7 +115,7 @@ function buildViews(tf) {
 }
 
 const callText = (v, asset, verdict) => `${verdict} ${v.name.toUpperCase()}${asset === "bonds" ? " BONDS" : ""}`;
-const rateWords = (verdict) => (verdict === "SELL" ? "rates rising" : verdict === "BUY" ? "rates falling" : "");
+const rateWords = (verdict) => (verdict === "SELL" ? "bonds sold, yields rising" : verdict === "BUY" ? "bonds bought, yields falling" : "");
 
 function explain(st, word) {
   if (!st) return "Not enough history yet.";
@@ -216,10 +216,10 @@ function insights() {
     const s = v.groups.stocks?.verdict, b = v.groups.bonds?.verdict;
     if (!s || !b) continue;
     const name = esc(v.name);
-    if (s === "BUY" && b === "SELL") out.push(`Money is leaving <b>${name} bonds</b> and moving into <b>${name} stocks</b>.`);
-    else if (s === "SELL" && b === "BUY") out.push(`In <b>${name}</b>, money is moving from stocks into bonds.`);
-    else if (s === "SELL" && b === "SELL") out.push(`<b>${name}</b> is being sold across the board: stocks <b>and</b> bonds.`);
-    else if (s === "BUY" && b === "BUY") out.push(`Everything in <b>${name}</b> is being bought: stocks and bonds.`);
+    if (s === "BUY" && b === "SELL") out.push(`<b>Risk-on in ${name}</b>: bonds sold (yields rising), stocks bought.`);
+    else if (s === "SELL" && b === "BUY") out.push(`<b>Flight to safety in ${name}</b>: stocks sold, bonds bought (yields falling).`);
+    else if (s === "SELL" && b === "SELL") out.push(`<b>Capital leaving ${name}</b>: stocks <b>and</b> bonds sold (yields rising).`);
+    else if (s === "BUY" && b === "BUY") out.push(`<b>Liquidity wave in ${name}</b>: stocks and bonds both bought (yields falling).`);
   }
   const sectors = state.data.markets.filter((m) => m.kind === "sector" && m.tf[tf]);
   if (sectors.length) {
@@ -379,58 +379,95 @@ function renderPulse() {
     <text class="axis" x="${pad}" y="11">▲ BROKE UP</text><text class="axis" x="${pad}" y="${h - 14}">▼ BROKE DOWN</text>${labels}</svg>`;
 }
 
-/* ---------- Replay: the last 60 sessions on the globe ---------- */
+/* ---------- Replay: the selected timeframe over the last 3, 6 or 12 months ---------- */
 
-function buildReplay(asset) {
-  const ms = state.data.markets.filter((m) => assetOf(m) === asset && m.country !== "GLOBAL");
-  const ptr = new Map(ms.map((m) => [m.symbol, 0]));
-  return pulseDays.map(([d]) => {
-    const sum = {}, cnt = {}, rsum = {};
-    let up = 0, down = 0;
-    for (const m of ms) {
-      let i = ptr.get(m.symbol);
-      while (i < m.hist.length && m.hist[i][0] <= d) i++;
-      ptr.set(m.symbol, i);
-      const e = m.hist[i - 1];
-      if (!e) continue;
-      sum[m.country] = (sum[m.country] ?? 0) + control({ s: e[1], g: e[2] }).score;
-      const q = m.hist.slice(Math.max(0, i - 3), i).map((x) => x[1]);
-      rsum[m.country] = (rsum[m.country] ?? 0) + (reversal({ q, g: e[2] })?.dir ?? 0);
-      cnt[m.country] = (cnt[m.country] ?? 0) + 1;
-      if (e[0] === d) { if (e[1] === "2u") up++; if (e[1] === "2d") down++; }
+// Frames from the per-day timeline. BY BAR: one frame per completed bar of the timeframe.
+// BY DAY: the bar in force on every trading day, as it stood that day.
+function buildReplay(asset, tf, step, days) {
+  const axis = state.data.axis;
+  if (!axis?.length) return [];
+  const from = Math.max(0, axis.length - days);
+  const keys = axis.map((d) => periodKey(d, tf));
+  const idx = [];
+  for (let i = from; i < axis.length; i++) {
+    if (step === "day" || tf === "D" || i === axis.length - 1 || keys[i + 1] !== keys[i]) idx.push(i);
+  }
+  const frames = idx.map((i) => ({ d: axis[i], i, sum: {}, cnt: {}, rsum: {}, up: 0, down: 0 }));
+  const at = new Map(idx.map((i, k) => [i, frames[k]]));
+  for (const m of state.data.markets) {
+    const line = m.tl?.[tf];
+    if (!line || assetOf(m) !== asset || m.country === "GLOBAL") continue;
+    const done = []; // final scenario of each completed bar
+    let lastKey = null, last = null;
+    for (let i = 0; i < axis.length; i++) {
+      if (lastKey !== null && keys[i] !== lastKey && last) done.push(last.s);
+      lastKey = keys[i];
+      last = decodeState(line[i]);
+      const f = at.get(i);
+      if (!f || !last) continue;
+      f.sum[m.country] = (f.sum[m.country] ?? 0) + control(last).score;
+      f.cnt[m.country] = (f.cnt[m.country] ?? 0) + 1;
+      f.rsum[m.country] = (f.rsum[m.country] ?? 0) + (reversal({ q: [...done.slice(-2), last.s], g: last.g })?.dir ?? 0);
+      if (last.s === "2u") f.up++;
+      if (last.s === "2d") f.down++;
     }
+  }
+  return frames.map((f) => {
     const scores = {}, rev = {};
-    for (const c in sum) { scores[c] = sum[c] / cnt[c]; rev[c] = rsum[c] / cnt[c]; }
-    return { d, scores, rev, up, down };
+    for (const c in f.sum) { scores[c] = f.sum[c] / f.cnt[c]; rev[c] = f.rsum[c] / f.cnt[c]; }
+    return { d: f.d, scores, rev, up: f.up, down: f.down };
   });
+}
+
+const RANGE_DAYS = { "3M": 63, "6M": 126, "1Y": 260 };
+function replayPlan() {
+  const tf = state.tf;
+  const step = tf === "D" ? "day" : tf === "Y" && state.replayStep === "bar" ? "day" : state.replayStep;
+  const range = state.replayRange ?? (tf === "D" ? "3M" : "1Y");
+  return { tf, step, range };
+}
+function renderReplayControls() {
+  const { tf, step, range } = replayPlan();
+  setPressed("stepSeg", step);
+  setPressed("rangeSeg", range);
+  document.querySelector('#stepSeg [data-v="bar"]').disabled = tf === "D" || tf === "Y";
+  if (!replayTimer) $("#replayBtn").textContent = `▶ REPLAY ${TF_HUD[tf]} BARS`;
+  $("#replayBtn").disabled = !state.data.axis;
+  $("#replayBtn").title = state.data.axis ? "" : "Replay starts after the next hourly update";
 }
 
 let replayTimer = null;
 function stopReplay() {
   clearInterval(replayTimer); replayTimer = null;
   state.frame = null;
-  $("#replayBtn").textContent = "▶ REPLAY 60 DAYS";
   $("#hudReplay").textContent = "";
+  $("#replayProg").style.width = "0";
   $("#pulseCursor")?.setAttribute("visibility", "hidden");
+  renderReplayControls();
   globe?.redraw();
 }
 function startReplay() {
   if (replayTimer) return stopReplay();
-  const frames = buildReplay(state.asset);
+  const { tf, step, range } = replayPlan();
+  const frames = buildReplay(state.asset, tf, step, RANGE_DAYS[range]);
   if (!frames.length) return;
   let i = 0;
   $("#replayBtn").textContent = "■ STOP";
-  const bw = (PULSE.w - PULSE.pad * 2) / frames.length;
+  const every = Math.max(60, Math.min(700, 12000 / frames.length));
+  const pulseIdx = new Map(pulseDays.map(([d], k) => [d, k]));
+  const bw = (PULSE.w - PULSE.pad * 2) / Math.max(pulseDays.length, 1);
   replayTimer = setInterval(() => {
     if (i >= frames.length) { stopReplay(); return; }
     const f = frames[i];
     state.frame = f;
-    $("#hudReplay").textContent = `REPLAY ${f.d} · ▲${f.up} ▼${f.down}`;
-    const cur = $("#pulseCursor");
-    if (cur) { const x = PULSE.pad + i * bw + bw / 2; cur.setAttribute("x1", x); cur.setAttribute("x2", x); cur.setAttribute("visibility", "visible"); }
+    $("#hudReplay").textContent = `REPLAY · ${TF_HUD[tf]} BARS · ${step === "day" ? "BY DAY" : "BY BAR"} · ${f.d} · ▲${f.up} ▼${f.down}`;
+    $("#replayProg").style.width = `${((i + 1) / frames.length) * 100}%`;
+    const cur = $("#pulseCursor"), k = pulseIdx.get(f.d);
+    if (cur && k !== undefined) { const x = PULSE.pad + k * bw + bw / 2; cur.setAttribute("x1", x); cur.setAttribute("x2", x); cur.setAttribute("visibility", "visible"); }
+    else cur?.setAttribute("visibility", "hidden");
     globe?.redraw();
     i++;
-  }, 160);
+  }, every);
 }
 
 /* ---------- Mini candlestick chart (shape only) ---------- */
@@ -438,7 +475,7 @@ function startReplay() {
 function sparkSvg(m, tf) {
   const sp = m.spark?.[tf];
   if (!sp?.c?.length) return "";
-  const n = sp.c.length / 4, W = 300, H = 92, top = 6, bot = 16, plot = H - top - bot;
+  const n = sp.c.length / 4, W = 300, H = 80, top = 6, bot = 6, plot = H - top - bot;
   const y = (v) => top + plot - (v / 999) * plot;
   const step = W / n, bw = Math.max(3, step * 0.56);
   let out = "";
@@ -451,9 +488,10 @@ function sparkSvg(m, tf) {
     const x = i * step + step / 2, cls = c > o ? "up" : c < o ? "down" : "flat";
     out += `<line x1="${x}" x2="${x}" y1="${y(h)}" y2="${y(l)}" class="wick ${cls}"/>`;
     out += `<rect x="${x - bw / 2}" y="${y(Math.max(o, c))}" width="${bw}" height="${Math.max(1.2, Math.abs(y(o) - y(c)))}" class="body ${cls}${i === n - 1 ? " cur" : ""}"/>`;
-    out += `<text x="${x}" y="${H - 4}" class="lbl ${esc(sp.s[i])}">${S_LABEL[sp.s[i]] ?? ""}</text>`;
   }
+  const labels = sp.s.map((s) => `<i class="s-${esc(s)}">${S_LABEL[s] ?? ""}</i>`).join("");
   return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Last ${n} ${TF_WORD[tf]} bars of ${esc(m.name)}">${out}</svg>
+    <div class="spark-lbls" style="grid-template-columns:repeat(${n},1fr)">${labels}</div>
     <div class="spark-cap"><span>LAST ${n} ${TF_HUD[tf]} BARS · SHAPE ONLY</span><span>${m.live ? "● CURRENT BAR LIVE" : "DOTTED = LAST BAR'S HIGH / LOW"}</span></div>`;
 }
 
@@ -676,7 +714,7 @@ function initGlobe(world, start) {
       dirty = true;
     }
     if (zoomAnim) {
-      const p = Math.min(1, (t - zoomAnim.t0) / 900);
+      const p = reduceMotion ? 1 : Math.min(1, (t - zoomAnim.t0) / 900);
       setZoom(zoomAnim.from + (zoomAnim.to - zoomAnim.from) * d3.easeCubicInOut(p));
       if (p >= 1) zoomAnim = null;
     }
@@ -729,7 +767,10 @@ function initGlobe(world, start) {
   });
   canvas.addEventListener("pointerleave", () => { state.hover = null; dirty = true; $("#hudTarget").innerHTML = ""; });
   canvas.addEventListener("click", (e) => { const code = countryAt(e); if (code && state.views[code]) openCountry(code); });
-  canvas.addEventListener("wheel", (e) => { e.preventDefault(); zoomAnim = null; setZoom(zoom * Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+  canvas.addEventListener("wheel", (e) => {
+    if ((e.deltaY > 0 && zoom <= ZMIN) || (e.deltaY < 0 && zoom >= ZMAX)) return;
+    e.preventDefault(); zoomAnim = null; setZoom(zoom * Math.exp(-e.deltaY * 0.0015));
+  }, { passive: false });
   canvas.addEventListener("dblclick", (e) => { e.preventDefault(); zoomAnim = { t0: performance.now(), from: zoom, to: zoom * 1.8 }; });
   const touches = new Map();
   let pinch = null;
@@ -793,7 +834,7 @@ function shareText() {
   return [
     `GOD'S EYE VIEW of the world's money (${TF_HUD[state.tf]} bars):`,
     $("#headline").textContent,
-    ...(state.flow === "off" ? [] : [$("#flowLine").textContent.replace(/^(MONEY|REVERSAL) FLOW · [A-Z]+/, "Money flow: ")]),
+    ...(state.flow === "off" ? [] : [`Money flow: ${$("#flowLine").textContent.slice($("#flowLine .flow-k")?.textContent.length ?? 0)}`]),
     ...topCalls().map((c) => c.text),
     `Headlines tell stories. Price tells the truth.`,
     `Not advice. Just price.`,
@@ -880,7 +921,7 @@ function update(patch = {}) {
   $("#hudTf").textContent = `TF ${TF_HUD[state.tf]} · ${state.asset.toUpperCase()}`;
   setPressed("flowSeg", state.flow);
   $("#flowHint").textContent = state.flow === "reversal" ? "ARCS: REVERSING DOWN → REVERSING UP" : state.flow === "control" ? "ARCS: MONEY LEAVING SELLERS → BUYERS" : "";
-  renderLegend(); renderIntel(); renderCountries(); renderReversals();
+  renderLegend(); renderIntel(); renderCountries(); renderReversals(); renderReplayControls();
   globe?.redraw();
   if (state.focus && !$("#drawer").hidden) openCountry(state.focus, false);
   else writeHash();
@@ -898,10 +939,12 @@ function wireControls() {
     if (t) openCountry(t.dataset.country);
   });
   $("#drawerClose").addEventListener("click", closeDrawer);
-  $("#drawer").addEventListener("click", (e) => { if (e.target.id === "drawer") closeDrawer(); });
+  $("#drawer").addEventListener("click", (e) => { if (e.target.id === "drawer" && e.detail < 2) closeDrawer(); });
   $("#share").addEventListener("click", share);
   $("#card").addEventListener("click", saveCard);
   $("#replayBtn").addEventListener("click", startReplay);
+  $("#stepSeg").addEventListener("click", (e) => { if (e.target.dataset.v && !e.target.disabled) { stopReplay(); state.replayStep = e.target.dataset.v; renderReplayControls(); } });
+  $("#rangeSeg").addEventListener("click", (e) => { if (e.target.dataset.v) { stopReplay(); state.replayRange = e.target.dataset.v; renderReplayControls(); } });
   $("#flowSeg").addEventListener("click", (e) => e.target.dataset.v && update({ flow: e.target.dataset.v }));
   document.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey || e.target.matches("input, textarea")) return;

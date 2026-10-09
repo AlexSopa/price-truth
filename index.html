@@ -68,7 +68,12 @@
       <div class="hud tl"><div id="hudOrbit">SAT-01 // ORBIT</div><div id="hudMode">SENSOR NORMAL</div></div>
       <div class="hud tr"><div><span class="rec"></span>REC</div><div id="hudTf">TF DAY</div><div id="hudReplay" class="hud-replay"></div></div>
       <div class="hud-headline" id="hudHeadline"></div>
-      <button class="replay" id="replayBtn" type="button">▶ REPLAY 60 DAYS</button>
+      <div class="replay-bar">
+        <button class="replay" id="replayBtn" type="button">▶ REPLAY</button>
+        <div class="seg mini" id="stepSeg" role="group" aria-label="Replay step"><button data-v="bar" title="One frame per completed bar">BY BAR</button><button data-v="day" title="The bar in force, day by day">BY DAY</button></div>
+        <div class="seg mini" id="rangeSeg" role="group" aria-label="Replay range"><button data-v="3M">3M</button><button data-v="6M">6M</button><button data-v="1Y">1Y</button></div>
+      </div>
+      <div class="replay-prog"><i id="replayProg"></i></div>
       <div class="zoom" role="group" aria-label="Zoom">
         <button id="zoomIn" type="button" aria-label="Zoom in">+</button>
         <span id="zoomLvl">1.0×</span>
@@ -142,7 +147,13 @@
     <div class="panel-head"><h2>How to read this</h2><span class="panel-meta">NO EXPERIENCE NEEDED</span></div>
     <p class="lead">Every market makes one bar per period: a day, a week, a month, a quarter, a year. We ask only one question: <b>did price break last period's high, its low, both, or neither?</b> That is TheStrat. No opinions. No news. Just what price did.</p>
     <div class="cards" id="howCards"></div>
-    <p class="fine">Bonds are read through government-bond fund prices. Bond prices falling = people selling that country's debt, so its interest rates go up. "All 5 timeframes green" means the day, week, month, quarter and year bars all trade above where they opened. Bars still trading are live and can change until they close.</p>
+    <div class="regimes">
+      <div><b class="up">Stocks bought · bonds sold</b><span>Risk-on. Money leaves safety for growth. Yields rise.</span></div>
+      <div><b class="down">Stocks sold · bonds bought</b><span>Flight to safety. Yields fall.</span></div>
+      <div><b class="down">Stocks sold · bonds sold</b><span>Capital leaving the country. Yields rise. The strongest SELL.</span></div>
+      <div><b class="up">Stocks bought · bonds bought</b><span>Liquidity wave. Yields fall.</span></div>
+    </div>
+    <p class="fine">Bonds are read through government-bond fund prices. A bond's price and its yield move in opposite directions, and a price only falls when sellers accept lower bids: bond prices falling = that country's debt is being sold = its yields rise. Every trade has a buyer and a seller, so "money flow" here means which side is pushing price, not money that physically moves. Some markets use US-listed funds priced in dollars (Chile, Poland, Norway, Thailand, Philippines, Saudi Arabia, China bonds, emerging-market bonds), so their moves include the currency. "All 5 timeframes green" means the day, week, month, quarter and year bars all trade above where they opened. Bars still trading are live and can change until they close.</p>
   </section>
 
   <footer class="foot">
