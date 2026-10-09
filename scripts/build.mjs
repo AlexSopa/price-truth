@@ -9,20 +9,24 @@ import { parseChart, chartUrl, isLive } from "../yahoo.js";
 const OUT = new URL("../data/signals.json", import.meta.url);
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const DEADLINE = Date.now() + 20 * 60 * 1000; // stay well inside the 30-minute job limit
+const MAX_STALE_DAYS = 7;
+let blocked = 0; // 429s in a row
 
 async function fetchChart(symbol) {
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (Date.now() > DEADLINE || blocked >= 3) return null;
+    let wait = 1500 * (attempt + 1);
     try {
       const r = await fetch(chartUrl(symbol, attempt % 2 ? "query2" : "query1"), {
         headers: { "User-Agent": UA, Accept: "application/json" },
         signal: AbortSignal.timeout(15000),
       });
-      if (r.ok) return await r.json();
+      if (r.ok) { blocked = 0; return await r.json(); }
       if (r.status === 404) return null;
-      await sleep(r.status === 429 ? 30000 * (attempt + 1) : 1500 * (attempt + 1));
-    } catch {
-      await sleep(1500 * (attempt + 1));
-    }
+      if (r.status === 429) { blocked++; wait = 20000 * (attempt + 1); }
+    } catch {}
+    if (attempt < 2) await sleep(wait);
   }
   return null;
 }
@@ -44,7 +48,8 @@ for (const m of MARKETS) {
   } else {
     out.failed.push(m.symbol);
     const old = previous.get(m.symbol);
-    if (old) out.markets.push({ ...old, ...m, live: false, stale: true });
+    const age = old?.asOf ? (Date.now() - Date.parse(old.asOf)) / 864e5 : Infinity;
+    if (old && age <= MAX_STALE_DAYS) out.markets.push({ ...old, ...m, live: false, stale: true });
   }
   await sleep(250);
 }

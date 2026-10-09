@@ -12,7 +12,7 @@ const WORLD_URL = "vendor/countries-110m.json";
 const RELAYS = []; // Add your own CORS relay URL prefixes here to allow ?relay= live mode on the public site.
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-const state = { tf: "D", asset: "stocks", sensor: "normal", data: null, views: {}, focus: null, hover: null, mine: null, frame: null };
+const state = { tf: "D", asset: "stocks", sensor: "normal", flow: "control", data: null, views: {}, focus: null, hover: null, mine: null, frame: null };
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -72,6 +72,29 @@ function verdictOf(score, members, tf) {
 const VERDICT_WORDS = { BUY: "Buyers in control", SELL: "Sellers in control", COILING: "Coiling inside the last bar", "LEANING UP": "Leaning up", "LEANING DOWN": "Leaning down", UNDECIDED: "Undecided" };
 const vClass = (v) => (v === "BUY" ? "buy" : v === "SELL" ? "sell" : "");
 
+// Money-flow pairs: from the countries where sellers control the bar to the ones where buyers do.
+// The arcs show where pressure sits, not tracked transfers.
+function flowPairs(scoreOf, min = 0.25) {
+  const pts = Object.values(state.views).map((v) => ({ code: v.code, at: v.at, s: scoreOf(v.code) })).filter((p) => p.at && p.s !== undefined);
+  const src = pts.filter((p) => p.s <= -min).sort((a, b) => a.s - b.s).slice(0, 10);
+  const dst = pts.filter((p) => p.s >= min).sort((a, b) => b.s - a.s).slice(0, 10);
+  if (!src.length || !dst.length) return { src, dst, pairs: [] };
+  const pairs = [];
+  const add = (a, b) => pairs.push({ a, b, w: -a.s * b.s, phase: (pairs.length * 0.37) % 1 });
+  src.forEach((a, i) => { for (let j = 0; j < Math.min(2, dst.length); j++) add(a, dst[(i + j) % dst.length]); });
+  dst.forEach((b, j) => { if (!pairs.some((p) => p.b === b)) add(src[j % src.length], b); });
+  pairs.forEach((p) => { p.w = Math.max(p.w, 0.3); });
+  return { src, dst, pairs };
+}
+
+// Net reversal direction of a country's markets on a timeframe: +1 all reversing up, -1 all reversing down.
+function revScore(code, tf = state.tf, asset = state.asset) {
+  const g = state.views[code]?.groups[asset];
+  if (!g) return undefined;
+  return mean(g.members.map((m) => reversal(m.tf[tf])?.dir ?? 0));
+}
+const FLOW_MIN = { control: 0.25, reversal: 0.01 };
+
 function buildViews(tf) {
   const views = {};
   for (const [code, c] of Object.entries(COUNTRIES)) {
@@ -113,7 +136,7 @@ function counts(pool, tf) {
 
 function renderIntel() {
   const { tf, asset } = state;
-  const pool = state.data.markets.filter((m) => assetOf(m) === asset && m.tf[tf]);
+  const pool = state.data.markets.filter((m) => (asset === "bonds" ? m.kind === "bond" : m.kind === "index") && m.tf[tf]);
   const n = counts(pool, tf);
   const noun = asset === "bonds" ? "bond markets" : "stock markets";
   const views = Object.values(state.views).filter((v) => v.groups[asset]);
@@ -172,6 +195,14 @@ function renderIntel() {
     : `<div class="calls-empty">NO CLEAN CALLS ON THIS TIMEFRAME. THE WORLD IS UNDECIDED.</div>`;
 
   $("#insights").innerHTML = insights().map((t) => `<li>${t}</li>`).join("");
+  const rev = state.flow === "reversal";
+  const { src, dst } = rev ? flowPairs((code) => revScore(code), FLOW_MIN.reversal) : flowPairs((code) => state.views[code]?.groups[asset]?.score);
+  const names = (arr) => arr.slice(0, 3).map((p) => `${state.views[p.code].flag} ${esc(state.views[p.code].name)}`).join(", ");
+  const k = `<span class="flow-k">${rev ? "REVERSAL FLOW" : "MONEY FLOW"} · ${TF_HUD[tf]}</span>`;
+  $("#flowLine").hidden = state.flow === "off";
+  $("#flowLine").innerHTML = src.length && dst.length
+    ? `${k}${rev ? "Reversing down, money leaving" : "Out of"} <b class="down">${names(src)}</b> <span class="flow-arrow">→</span> ${rev ? "reversing up, money arriving in" : "into"} <b class="up">${names(dst)}</b>`
+    : `${k}${rev ? "No country is reversing on both sides of the flow right now." : "No clear flow. Buyers and sellers are not in control anywhere."}`;
   renderMine();
 }
 
@@ -354,7 +385,7 @@ function buildReplay(asset) {
   const ms = state.data.markets.filter((m) => assetOf(m) === asset && m.country !== "GLOBAL");
   const ptr = new Map(ms.map((m) => [m.symbol, 0]));
   return pulseDays.map(([d]) => {
-    const sum = {}, cnt = {};
+    const sum = {}, cnt = {}, rsum = {};
     let up = 0, down = 0;
     for (const m of ms) {
       let i = ptr.get(m.symbol);
@@ -363,12 +394,14 @@ function buildReplay(asset) {
       const e = m.hist[i - 1];
       if (!e) continue;
       sum[m.country] = (sum[m.country] ?? 0) + control({ s: e[1], g: e[2] }).score;
+      const q = m.hist.slice(Math.max(0, i - 3), i).map((x) => x[1]);
+      rsum[m.country] = (rsum[m.country] ?? 0) + (reversal({ q, g: e[2] })?.dir ?? 0);
       cnt[m.country] = (cnt[m.country] ?? 0) + 1;
       if (e[0] === d) { if (e[1] === "2u") up++; if (e[1] === "2d") down++; }
     }
-    const scores = {};
-    for (const c in sum) scores[c] = sum[c] / cnt[c];
-    return { d, scores, up, down };
+    const scores = {}, rev = {};
+    for (const c in sum) { scores[c] = sum[c] / cnt[c]; rev[c] = rsum[c] / cnt[c]; }
+    return { d, scores, rev, up, down };
   });
 }
 
@@ -379,6 +412,7 @@ function stopReplay() {
   $("#replayBtn").textContent = "▶ REPLAY 60 DAYS";
   $("#hudReplay").textContent = "";
   $("#pulseCursor")?.setAttribute("visibility", "hidden");
+  globe?.redraw();
 }
 function startReplay() {
   if (replayTimer) return stopReplay();
@@ -399,6 +433,30 @@ function startReplay() {
   }, 160);
 }
 
+/* ---------- Mini candlestick chart (shape only) ---------- */
+
+function sparkSvg(m, tf) {
+  const sp = m.spark?.[tf];
+  if (!sp?.c?.length) return "";
+  const n = sp.c.length / 4, W = 300, H = 92, top = 6, bot = 16, plot = H - top - bot;
+  const y = (v) => top + plot - (v / 999) * plot;
+  const step = W / n, bw = Math.max(3, step * 0.56);
+  let out = "";
+  if (n >= 2) {
+    const ph = sp.c[(n - 2) * 4 + 1], pl = sp.c[(n - 2) * 4 + 2];
+    out += `<line x1="0" x2="${W}" y1="${y(ph)}" y2="${y(ph)}" class="trig"/><line x1="0" x2="${W}" y1="${y(pl)}" y2="${y(pl)}" class="trig"/>`;
+  }
+  for (let i = 0; i < n; i++) {
+    const [o, h, l, c] = sp.c.slice(i * 4, i * 4 + 4);
+    const x = i * step + step / 2, cls = c > o ? "up" : c < o ? "down" : "flat";
+    out += `<line x1="${x}" x2="${x}" y1="${y(h)}" y2="${y(l)}" class="wick ${cls}"/>`;
+    out += `<rect x="${x - bw / 2}" y="${y(Math.max(o, c))}" width="${bw}" height="${Math.max(1.2, Math.abs(y(o) - y(c)))}" class="body ${cls}${i === n - 1 ? " cur" : ""}"/>`;
+    out += `<text x="${x}" y="${H - 4}" class="lbl ${esc(sp.s[i])}">${S_LABEL[sp.s[i]] ?? ""}</text>`;
+  }
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Last ${n} ${TF_WORD[tf]} bars of ${esc(m.name)}">${out}</svg>
+    <div class="spark-cap"><span>LAST ${n} ${TF_HUD[tf]} BARS · SHAPE ONLY</span><span>${m.live ? "● CURRENT BAR LIVE" : "DOTTED = LAST BAR'S HIGH / LOW"}</span></div>`;
+}
+
 /* ---------- Drawer ---------- */
 
 function openCountry(code, refocus = true) {
@@ -413,6 +471,7 @@ function openCountry(code, refocus = true) {
     const rev = reversal(m.tf[tf]);
     const others = TIMEFRAMES.filter((t) => t !== tf).map((t) => [t, reversal(m.tf[t])]).filter(([, r]) => r);
     return `<div class="dr-item"><div class="top"><b>${esc(m.name)}</b><span>${esc(m.symbol)} · ${m.live ? '<em class="live">● LIVE BAR</em>' : `LAST BAR ${esc(m.asOf)}`}${m.stale ? " · DATA DELAYED" : ""}</span></div>
+      ${sparkSvg(m, tf)}
       <div class="row five">${cells(m, tf)}</div>
       <p>${esc(explain(m.tf[tf], TF_WORD[tf]))}</p>
       ${rev ? `<p class="dr-rev ${rev.dir > 0 ? "up" : "down"}">↺ ${esc(rev.name)} on the ${TF_WORD[tf]}: ${esc(rev.story)}</p>` : ""}
@@ -424,13 +483,16 @@ function openCountry(code, refocus = true) {
     ${Object.entries(v.groups).map(([a, g]) => `<div class="dr-group"><h4>${a.toUpperCase()} <span class="verdict ${vClass(g.verdict)}">${esc(g.verdict)}</span></h4>${g.members.map(item).join("")}</div>`).join("")}
     <p class="disclaim">Education only. Not investment advice.</p>`;
   const wasHidden = $("#drawer").hidden;
+  if (wasHidden) lastFocus = document.activeElement;
   $("#drawer").hidden = false;
   if (wasHidden) $("#drawerClose").focus();
   writeHash();
 }
+let lastFocus = null;
 function closeDrawer() {
   if ($("#drawer").hidden) return;
   $("#drawer").hidden = true; state.focus = null; globe?.focus(null); writeHash();
+  lastFocus?.focus?.();
 }
 
 /* ---------- Globe ---------- */
@@ -462,6 +524,9 @@ function initGlobe(world, start) {
   const at = start && COUNTRIES[start]?.at;
   let rot = at ? [-at[0] + 25, -at[1] * 0.6, 0] : [-10, -25, 0];
   let spin = !reduceMotion, anim = null, w = 0, h = 0, resumeAt = 0, dirty = true;
+  let zoom = 1, zoomAnim = null, base = 1;
+  const ZMIN = 1, ZMAX = 6;
+  const setZoom = (z) => { zoom = Math.max(ZMIN, Math.min(ZMAX, z)); proj.scale(base * zoom); dirty = true; $("#zoomLvl").textContent = `${zoom.toFixed(1)}×`; };
   let visible = true, lastDraw = 0, lastHud = 0, lastT = performance.now();
 
   function resize() {
@@ -470,7 +535,8 @@ function initGlobe(world, start) {
     w = r.width; h = r.height;
     canvas.width = w * dpr; canvas.height = h * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    proj.translate([w / 2, h / 2]).scale(Math.min(w, h) * 0.42);
+    base = Math.min(w, h) * 0.42;
+    proj.translate([w / 2, h / 2]).scale(base * zoom);
     dirty = true;
   }
   new ResizeObserver(resize).observe(canvas);
@@ -478,6 +544,57 @@ function initGlobe(world, start) {
   resize();
 
   const scoreOf = (code) => (state.frame ? state.frame.scores[code] : state.views[code]?.groups[state.asset]?.score);
+
+  // Project a point lifted h globe-radii above the surface. Hidden when behind the planet.
+  function lift(p, h) {
+    const [l, f] = d3.geoRotation(rot)(p).map((x) => (x * Math.PI) / 180);
+    const [cx, cy] = proj.translate(), R = proj.scale(), r = R * (1 + h);
+    const x = cx + r * Math.cos(f) * Math.sin(l), y = cy - r * Math.sin(f);
+    return [x, y, Math.cos(f) * Math.cos(l) > 0 || Math.hypot(x - cx, y - cy) > R];
+  }
+  let flowKey = "", flows = [];
+  function currentFlows() {
+    const key = `${state.flow}|${state.asset}|${state.tf}|${state.frame?.d ?? ""}|${Object.keys(state.views).length}`;
+    if (key !== flowKey) {
+      flowKey = key;
+      const rev = state.flow === "reversal";
+      const fn = rev ? (code) => (state.frame ? state.frame.rev[code] : revScore(code)) : scoreOf;
+      flows = flowPairs(fn, FLOW_MIN[state.flow]).pairs.map((f) => {
+        const dist = d3.geoDistance(f.a.at, f.b.at);
+        return { ...f, dist, interp: d3.geoInterpolate(f.a.at, f.b.at), h: 0.06 + 0.2 * (dist / Math.PI) };
+      });
+    }
+    return flows;
+  }
+  function drawFlows(t, P) {
+    const list = currentFlows();
+    if (!list.length) return;
+    const lo = heat(-1), hi = heat(1);
+    for (const f of list) {
+      const pts = [];
+      for (let i = 0; i <= 40; i++) { const u = i / 40; pts.push(lift(f.interp(u), f.h * Math.sin(Math.PI * u))); }
+      const a = pts[0], b = pts[40];
+      const grad = ctx.createLinearGradient(a[0], a[1], b[0], b[1]);
+      grad.addColorStop(0, d3.color(lo).copy({ opacity: 0.55 }).formatRgb());
+      grad.addColorStop(1, d3.color(hi).copy({ opacity: 0.75 }).formatRgb());
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 0.8 + f.w * 1.6;
+      ctx.beginPath();
+      let pen = false;
+      for (const [x, y, vis] of pts) { if (vis) { pen ? ctx.lineTo(x, y) : ctx.moveTo(x, y); pen = true; } else pen = false; }
+      ctx.stroke();
+      // Particles: money moving from the selling side to the buying side.
+      const n = 2 + Math.round(f.w * 3);
+      for (let k = 0; k < n; k++) {
+        const u = reduceMotion ? (k + 0.5) / n : ((t * 0.00022) / (0.35 + f.dist) + f.phase + k / n) % 1;
+        const [x, y, vis] = lift(f.interp(u), f.h * Math.sin(Math.PI * u));
+        if (!vis) continue;
+        const c = d3.interpolateRgb(lo, hi)(u);
+        ctx.beginPath(); ctx.arc(x, y, 5, 0, 2 * Math.PI); ctx.fillStyle = d3.color(c).copy({ opacity: 0.18 }).formatRgb(); ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, 1.9, 0, 2 * Math.PI); ctx.fillStyle = P.text; ctx.fill();
+      }
+    }
+  }
 
   function draw(t) {
     const P = SENSOR[state.sensor];
@@ -501,6 +618,8 @@ function initGlobe(world, start) {
       ctx.lineWidth = hot ? 1.4 : 0.5;
       ctx.stroke();
     }
+
+    if (state.flow !== "off") drawFlows(t, P);
 
     // Markers with Strat labels on the visible side. Labels that would overlap are skipped.
     const center = [-rot[0], -rot[1]];
@@ -555,10 +674,19 @@ function initGlobe(world, start) {
       rot = anim.i(d3.easeCubicInOut(p));
       if (p >= 1) anim = null;
       dirty = true;
+    }
+    if (zoomAnim) {
+      const p = Math.min(1, (t - zoomAnim.t0) / 900);
+      setZoom(zoomAnim.from + (zoomAnim.to - zoomAnim.from) * d3.easeCubicInOut(p));
+      if (p >= 1) zoomAnim = null;
+    }
+    if (anim) {
+      // rotation handled above
     } else if (spin && t > resumeAt) {
       rot[0] = (rot[0] + 0.0042 * dt) % 360;
       dirty = true;
     }
+    if (state.flow !== "off" && !reduceMotion) dirty = true;
     if (!dirty && reduceMotion) return;
     if (t - lastDraw < 33) return; // 30 fps is enough and saves battery
     lastDraw = t;
@@ -568,15 +696,17 @@ function initGlobe(world, start) {
   draw(performance.now());
   requestAnimationFrame(frame);
 
+  // Mouse: d3.drag rotates freely. Touch is handled below so a vertical swipe still scrolls the page.
   d3.select(canvas).call(d3.drag()
+    .filter((e) => e.type === "mousedown" && !e.button)
     .on("start", () => { anim = null; resumeAt = Infinity; })
     .on("drag", (e) => {
       const k = 70 / proj.scale();
-      const touch = e.sourceEvent?.pointerType === "touch";
-      rot = [rot[0] + e.dx * k, touch ? rot[1] : Math.max(-80, Math.min(80, rot[1] - e.dy * k)), 0];
+      rot = [rot[0] + e.dx * k, Math.max(-80, Math.min(80, rot[1] - e.dy * k)), 0];
       dirty = true;
     })
     .on("end", () => { resumeAt = performance.now() + 5000; }));
+  canvas.style.touchAction = "pan-y";
 
   function countryAt(evt) {
     const r = canvas.getBoundingClientRect();
@@ -599,6 +729,32 @@ function initGlobe(world, start) {
   });
   canvas.addEventListener("pointerleave", () => { state.hover = null; dirty = true; $("#hudTarget").innerHTML = ""; });
   canvas.addEventListener("click", (e) => { const code = countryAt(e); if (code && state.views[code]) openCountry(code); });
+  canvas.addEventListener("wheel", (e) => { e.preventDefault(); zoomAnim = null; setZoom(zoom * Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+  canvas.addEventListener("dblclick", (e) => { e.preventDefault(); zoomAnim = { t0: performance.now(), from: zoom, to: zoom * 1.8 }; });
+  const touches = new Map();
+  let pinch = null;
+  canvas.addEventListener("pointerdown", (e) => { if (e.pointerType === "touch") touches.set(e.pointerId, [e.clientX, e.clientY]); });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!touches.has(e.pointerId)) return;
+    const prev = touches.get(e.pointerId);
+    touches.set(e.pointerId, [e.clientX, e.clientY]);
+    if (touches.size === 1) {
+      anim = null; resumeAt = performance.now() + 5000;
+      rot = [rot[0] + (e.clientX - prev[0]) * (70 / proj.scale()), rot[1], 0];
+      dirty = true;
+      return;
+    }
+    if (touches.size !== 2) { pinch = null; return; }
+    const [a, b] = [...touches.values()];
+    const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+    if (pinch) setZoom(pinch.z * (d / pinch.d)); else pinch = { d, z: zoom };
+  });
+  const lift2 = (e) => { touches.delete(e.pointerId); pinch = null; };
+  canvas.addEventListener("pointerup", lift2);
+  canvas.addEventListener("pointercancel", lift2);
+  $("#zoomIn").addEventListener("click", () => { zoomAnim = { t0: performance.now(), from: zoom, to: zoom * 1.6 }; });
+  $("#zoomOut").addEventListener("click", () => { zoomAnim = { t0: performance.now(), from: zoom, to: zoom / 1.6 }; });
+  $("#zoomReset").addEventListener("click", () => { zoomAnim = { t0: performance.now(), from: zoom, to: 1 }; });
 
   return {
     redraw() { dirty = true; },
@@ -612,6 +768,7 @@ function initGlobe(world, start) {
       while (to[0] - from[0] > 180) to[0] -= 360;
       while (from[0] - to[0] > 180) to[0] += 360;
       anim = { t0: performance.now(), i: d3.interpolate(from, to) };
+      if (zoom < 2.2) zoomAnim = { t0: performance.now(), from: zoom, to: 2.2 };
     },
   };
 }
@@ -636,6 +793,7 @@ function shareText() {
   return [
     `GOD'S EYE VIEW of the world's money (${TF_HUD[state.tf]} bars):`,
     $("#headline").textContent,
+    ...(state.flow === "off" ? [] : [$("#flowLine").textContent.replace(/^(MONEY|REVERSAL) FLOW · [A-Z]+/, "Money flow: ")]),
     ...topCalls().map((c) => c.text),
     `Headlines tell stories. Price tells the truth.`,
     `Not advice. Just price.`,
@@ -692,7 +850,7 @@ async function saveCard() {
   const blob = await makeCard();
   if (!blob) return;
   const file = new File([blob], `gods-eye-view-${state.tf}-${state.data.generatedAt.slice(0, 10)}.png`, { type: "image/png" });
-  if (navigator.canShare?.({ files: [file] })) {
+  if (matchMedia("(pointer: coarse)").matches && navigator.canShare?.({ files: [file] })) {
     try { await navigator.share({ files: [file], text: shareText() }); return; } catch {}
   }
   const a = document.createElement("a");
@@ -708,7 +866,7 @@ function setPressed(segId, v) {
 }
 
 function writeHash() {
-  history.replaceState(null, "", `${location.pathname}${location.search}#tf=${state.tf}&asset=${state.asset}&sensor=${state.sensor}${state.focus ? `&c=${state.focus}` : ""}`);
+  history.replaceState(null, "", `${location.pathname}${location.search}#tf=${state.tf}&asset=${state.asset}&sensor=${state.sensor}&flow=${state.flow}${state.focus ? `&c=${state.focus}` : ""}`);
 }
 
 function update(patch = {}) {
@@ -720,6 +878,8 @@ function update(patch = {}) {
   setPressed("tfSeg", state.tf); setPressed("assetSeg", state.asset); setPressed("sensorSeg", state.sensor);
   $("#hudMode").textContent = `SENSOR ${state.sensor === "flir" ? "FLIR · BUYING RUNS HOT" : state.sensor === "nvg" ? "NVG" : "NORMAL"}`;
   $("#hudTf").textContent = `TF ${TF_HUD[state.tf]} · ${state.asset.toUpperCase()}`;
+  setPressed("flowSeg", state.flow);
+  $("#flowHint").textContent = state.flow === "reversal" ? "ARCS: REVERSING DOWN → REVERSING UP" : state.flow === "control" ? "ARCS: MONEY LEAVING SELLERS → BUYERS" : "";
   renderLegend(); renderIntel(); renderCountries(); renderReversals();
   globe?.redraw();
   if (state.focus && !$("#drawer").hidden) openCountry(state.focus, false);
@@ -742,6 +902,7 @@ function wireControls() {
   $("#share").addEventListener("click", share);
   $("#card").addEventListener("click", saveCard);
   $("#replayBtn").addEventListener("click", startReplay);
+  $("#flowSeg").addEventListener("click", (e) => e.target.dataset.v && update({ flow: e.target.dataset.v }));
   document.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey || e.target.matches("input, textarea")) return;
     const k = e.key.toUpperCase();
@@ -753,6 +914,9 @@ function wireControls() {
     else if (k === "2") update({ sensor: "flir" });
     else if (k === "3") update({ sensor: "nvg" });
     else if (k === "R") startReplay();
+    else if (k === "F") update({ flow: { control: "reversal", reversal: "off", off: "control" }[state.flow] });
+    else if (k === "+" || k === "=") $("#zoomIn").click();
+    else if (k === "-") $("#zoomOut").click();
   });
 }
 
@@ -762,6 +926,7 @@ function readHash() {
   if (TIMEFRAMES.includes(p.get("tf"))) out.tf = p.get("tf");
   if (["stocks", "bonds"].includes(p.get("asset"))) out.asset = p.get("asset");
   if (["normal", "flir", "nvg"].includes(p.get("sensor"))) out.sensor = p.get("sensor");
+  if (["control", "reversal", "off"].includes(p.get("flow"))) out.flow = p.get("flow");
   return { patch: out, country: p.get("c")?.toUpperCase() };
 }
 
@@ -783,6 +948,7 @@ function renderHow() {
     ["2D · Broke the low", "Price went below the last low. If it closes red, sellers are in control.", candle(prev, [8, 62, 55, 15], "var(--down)")],
     ["1 · Coiling", "Price stayed inside the last range. Nobody has won yet. Watch which side breaks.", candle(prev, [38, 62, 42, 55], "var(--fg-2)")],
     ["3 · Broke both", "Price broke both sides. Buyers and sellers fought, and the close shows who is winning.", candle(prev, [10, 95, 30, 85], "var(--gold)")],
+    ["→ Money flow", "CONTROL arcs run from countries where sellers control the bar to countries where buyers do. REVERSALS arcs run from markets reversing down to markets reversing up. They show pressure, not tracked transfers.", candle([20, 50, 45, 25], [35, 80, 40, 75], "var(--accent)")],
     ["↺ Reversal", "Control flipped. Example 2-1-2: sellers broke the low, price paused inside, then buyers broke the high.", candle([20, 50, 45, 25], [35, 80, 40, 75], "var(--up)")],
   ].map(([t, p, svg]) => `<div class="card">${svg}<div><h3>${t}</h3><p>${p}</p></div></div>`).join("");
 }
@@ -836,7 +1002,12 @@ async function main() {
   renderPulse();
   const { patch, country } = readHash();
   update(patch);
-  addEventListener("hashchange", () => { const h = readHash(); update(h.patch); if (h.country && h.country !== state.focus) openCountry(h.country); });
+  addEventListener("hashchange", () => {
+    const h = readHash();
+    update(h.patch);
+    if (h.country && h.country !== state.focus) openCountry(h.country);
+    else if (!h.country) closeDrawer();
+  });
   try {
     globe = initGlobe(await worldP, country || state.mine);
   } catch {

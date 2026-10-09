@@ -73,14 +73,14 @@ export function reversal(st) {
   const [a, b, c] = st.q.length === 3 ? st.q : [null, ...st.q.slice(-2)];
   const up = c === "2u", dn = c === "2d";
   if (!up && !dn) return null;
+  if (up && st.g < 0) return { dir: -1, name: "FAILED 2U", story: "Price broke the high but is closing red. Buyers are failing." };
+  if (dn && st.g > 0) return { dir: 1, name: "FAILED 2D", story: "Price broke the low but is closing green. Sellers are failing." };
   const dir = up ? 1 : -1;
   const against = up ? "2d" : "2u";
   if (a === against && b === "1") return { dir, name: up ? "2-1-2 UP" : "2-1-2 DOWN", story: up ? "Sellers pushed, paused, then buyers broke out." : "Buyers pushed, paused, then sellers broke down." };
   if (a === "3" && b === "1") return { dir, name: up ? "3-1-2 UP" : "3-1-2 DOWN", story: up ? "A big fight, a pause, then buyers broke out." : "A big fight, a pause, then sellers broke down." };
   if (a === "1" && b === against) return { dir, name: up ? "1-2-2 UP" : "1-2-2 DOWN", story: up ? "Sellers broke out of a pause, failed, and buyers took over." : "Buyers broke out of a pause, failed, and sellers took over." };
   if (b === against) return { dir, name: up ? "2-2 UP" : "2-2 DOWN", story: up ? "Sellers had control last bar. Buyers took it back this bar." : "Buyers had control last bar. Sellers took it back this bar." };
-  if (up && st.g < 0) return { dir: -1, name: "FAILED 2U", story: "Price broke the high but is closing red. Buyers are failing." };
-  if (dn && st.g > 0) return { dir: 1, name: "FAILED 2D", story: "Price broke the low but is closing green. Sellers are failing." };
   return null;
 }
 
@@ -104,7 +104,22 @@ export function continuity(tfStates) {
   return 0;
 }
 
-// Everything we publish for one market: labels only, never prices.
+// Chart shape of the last n bars: o,h,l,c scaled to 0-999 inside that window, plus each bar's scenario.
+// Price levels cannot be read back from it.
+export function spark(bars, n = 15) {
+  const from = Math.max(0, bars.length - n);
+  const win = bars.slice(from);
+  if (!win.length) return null;
+  const lo = Math.min(...win.map((b) => b.l)), hi = Math.max(...win.map((b) => b.h));
+  const k = hi > lo ? 999 / (hi - lo) : 0;
+  const z = (v) => Math.round((v - lo) * k);
+  return {
+    c: win.flatMap((b) => [z(b.o), z(b.h), z(b.l), z(b.c)]),
+    s: win.map((b, i) => (from + i > 0 ? scenario(b, bars[from + i - 1]) : "")),
+  };
+}
+
+// Everything we publish for one market: labels and chart shapes only, never prices.
 // Markets that trade on Sundays (Sunday-Thursday weeks) start their week on Sunday.
 // 24/7 markets (crypto) trade every day, so they keep Monday weeks.
 export function sundayWeek(daily) {
@@ -115,11 +130,15 @@ export function sundayWeek(daily) {
 
 export function analyze(daily, histDays = 90) {
   const sun = sundayWeek(daily);
-  const tf = {};
-  for (const t of TIMEFRAMES) tf[t] = lastState(aggregate(daily, t, sun));
+  const tf = {}, sp = {};
+  for (const t of TIMEFRAMES) {
+    const bars = aggregate(daily, t, sun);
+    tf[t] = lastState(bars);
+    sp[t] = spark(bars);
+  }
   const hist = [];
   for (let i = Math.max(1, daily.length - histDays); i < daily.length; i++) {
     hist.push([daily[i].d, scenario(daily[i], daily[i - 1]), color(daily[i])]);
   }
-  return { asOf: daily[daily.length - 1]?.d ?? null, tf, hist };
+  return { asOf: daily[daily.length - 1]?.d ?? null, tf, hist, spark: sp };
 }

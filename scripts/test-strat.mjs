@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { scenario, aggregate, analyze, control, continuity, sundayWeek, reversal } from "../strat.js";
+import { scenario, aggregate, analyze, control, continuity, sundayWeek, reversal, spark } from "../strat.js";
 import { parseChart, isLive } from "../yahoo.js";
 
 const b = (d, o, h, l, c) => ({ d, o, h, l, c });
@@ -62,12 +62,16 @@ const p = parseChart(chart([
 ], { regularMarketPrice: 11.5 }));
 assert.deepEqual(p.map((x) => x.d), ["2026-07-01", "2026-12-01", "2026-12-03"]);
 assert.equal(p[2].c, 11.5);
-const live = { chart: { result: [{ meta: { currentTradingPeriod: { regular: { start: 100, end: 200 } } } }] } };
-assert.equal(isLive(live, 150), true);
-assert.equal(isLive(live, 250), false);
+const day = ts("2026-10-08T14:00:00Z");
+const live = { chart: { result: [{ meta: { exchangeTimezoneName: "UTC", currentTradingPeriod: { regular: { start: day - 3600, end: day + 3600 } } }, timestamp: [day - 600] }] } };
+assert.equal(isLive(live, day), true);
+assert.equal(isLive(live, day + 7200), false); // session closed
+live.chart.result[0].timestamp = [day - 86400];
+assert.equal(isLive(live, day), false); // last bar is yesterday's
 
 // Reversals
 assert.equal(reversal({ q: ["2d", "1", "2u"], g: 1 }).name, "2-1-2 UP");
+assert.equal(reversal({ q: ["2d", "1", "2u"], g: -1 }).name, "FAILED 2U"); // a red 2u is not a reversal up
 assert.equal(reversal({ q: ["2u", "1", "2d"], g: -1 }).name, "2-1-2 DOWN");
 assert.equal(reversal({ q: ["3", "1", "2u"], g: 1 }).name, "3-1-2 UP");
 assert.equal(reversal({ q: ["1", "2u", "2d"], g: -1 }).name, "1-2-2 DOWN");
@@ -76,5 +80,12 @@ assert.equal(reversal({ q: ["2u", "2u", "2u"], g: -1 }).name, "FAILED 2U");
 assert.equal(reversal({ q: ["2u", "2u", "2u"], g: 1 }), null); // continuation, not a reversal
 assert.equal(reversal({ q: ["2d", "1", "1"], g: 1 }), null);
 assert.deepEqual(a.tf.W.q, ["2u"]); // only two weeks of data -> one scenario
+
+// Chart shapes: scaled 0-999 inside the window, scenario per bar.
+const sp = spark([b("a", 10, 12, 9, 11), b("b", 11, 14, 10, 13), b("c", 13, 13, 10, 10)], 2);
+assert.deepEqual(sp.c, [250, 999, 0, 749, 749, 749, 0, 0]); // (13-10) * 999 / 4 = 749.25
+assert.deepEqual(sp.s, ["2u", "1"]);
+assert.equal(spark([b("a", 5, 5, 5, 5)]).c.every((v) => v === 0), true); // flat window
+assert.equal(a.spark.D.c.length, 4 * 4);
 
 console.log("strat engine: all tests pass");

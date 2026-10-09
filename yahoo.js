@@ -1,7 +1,7 @@
 // Yahoo Finance chart API helpers. Shared by the build script and the optional browser live mode.
 
 export const chartUrl = (symbol, host = "query1") =>
-  `https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=2y&interval=1d`;
+  `https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5y&interval=1d`;
 
 const fmtCache = new Map();
 function localDate(t, tz) {
@@ -33,8 +33,11 @@ export function parseChart(json) {
   return bars;
 }
 
-// True while the exchange's regular session is open, so the last bar is still forming.
+// True while the exchange's regular session is open and the last bar is today's, so it is still forming.
 export function isLive(json, now = Date.now() / 1000) {
-  const reg = json?.chart?.result?.[0]?.meta?.currentTradingPeriod?.regular;
-  return !!reg && now >= reg.start && now < reg.end;
+  const res = json?.chart?.result?.[0];
+  const reg = res?.meta?.currentTradingPeriod?.regular;
+  if (!reg || now < reg.start || now >= reg.end || !res.timestamp?.length) return false;
+  const tz = res.meta.exchangeTimezoneName || "UTC";
+  return localDate(res.timestamp.at(-1), tz) === localDate(now, tz);
 }
