@@ -21,27 +21,28 @@ export function scenario(cur, prev) {
 // +1 green (close above open), -1 red, 0 flat.
 export const color = (b) => Math.sign(b.c - b.o);
 
-function weekKey(d) {
-  // Monday of the week, in UTC (dates are already exchange-local calendar days).
+function weekKey(d, sunStart = false) {
+  // First day of the week (Monday, or Sunday for Sunday-Thursday markets such as Saudi Arabia).
+  // Dates are already exchange-local calendar days.
   const t = new Date(d + "T00:00:00Z");
-  const dow = (t.getUTCDay() + 6) % 7;
+  const dow = sunStart ? t.getUTCDay() : (t.getUTCDay() + 6) % 7;
   t.setUTCDate(t.getUTCDate() - dow);
   return t.toISOString().slice(0, 10);
 }
 
 const KEY = {
   D: (d) => d,
-  W: weekKey,
+  W: (d, sunStart) => weekKey(d, sunStart),
   M: (d) => d.slice(0, 7),
   Q: (d) => `${d.slice(0, 4)}-Q${Math.floor((+d.slice(5, 7) - 1) / 3) + 1}`,
   Y: (d) => d.slice(0, 4),
 };
 
 // Roll daily bars up into one timeframe. Each output bar keeps its period key in `k`.
-export function aggregate(daily, tf) {
+export function aggregate(daily, tf, sunStart = false) {
   const out = [];
   for (const b of daily) {
-    const k = KEY[tf](b.d);
+    const k = KEY[tf](b.d, sunStart);
     const last = out[out.length - 1];
     if (last && last.k === k) {
       last.h = Math.max(last.h, b.h);
@@ -55,11 +56,32 @@ export function aggregate(daily, tf) {
   return out;
 }
 
-// Current-bar state on one timeframe: { s: scenario, g: color }.
+// Current-bar state on one timeframe: { s: scenario, g: color, q: last 3 scenarios (oldest first) }.
 export function lastState(bars) {
   if (bars.length < 2) return null;
-  const cur = bars[bars.length - 1];
-  return { s: scenario(cur, bars[bars.length - 2]), g: color(cur) };
+  const n = bars.length;
+  const cur = bars[n - 1];
+  const q = [];
+  for (let i = Math.max(1, n - 3); i < n; i++) q.push(scenario(bars[i], bars[i - 1]));
+  return { s: q[q.length - 1], g: color(cur), q };
+}
+
+// TheStrat reversal in force on the current bar, or null.
+// Returns { dir: 1 up / -1 down, name, story } — longest pattern first.
+export function reversal(st) {
+  if (!st?.q) return null;
+  const [a, b, c] = st.q.length === 3 ? st.q : [null, ...st.q.slice(-2)];
+  const up = c === "2u", dn = c === "2d";
+  if (!up && !dn) return null;
+  const dir = up ? 1 : -1;
+  const against = up ? "2d" : "2u";
+  if (a === against && b === "1") return { dir, name: up ? "2-1-2 UP" : "2-1-2 DOWN", story: up ? "Sellers pushed, paused, then buyers broke out." : "Buyers pushed, paused, then sellers broke down." };
+  if (a === "3" && b === "1") return { dir, name: up ? "3-1-2 UP" : "3-1-2 DOWN", story: up ? "A big fight, a pause, then buyers broke out." : "A big fight, a pause, then sellers broke down." };
+  if (a === "1" && b === against) return { dir, name: up ? "1-2-2 UP" : "1-2-2 DOWN", story: up ? "Sellers broke out of a pause, failed, and buyers took over." : "Buyers broke out of a pause, failed, and sellers took over." };
+  if (b === against) return { dir, name: up ? "2-2 UP" : "2-2 DOWN", story: up ? "Sellers had control last bar. Buyers took it back this bar." : "Buyers had control last bar. Sellers took it back this bar." };
+  if (up && st.g < 0) return { dir: -1, name: "FAILED 2U", story: "Price broke the high but is closing red. Buyers are failing." };
+  if (dn && st.g > 0) return { dir: 1, name: "FAILED 2D", story: "Price broke the low but is closing green. Sellers are failing." };
+  return null;
 }
 
 // Who controls the bar, in plain words, and a score from -1 to +1.
@@ -68,7 +90,7 @@ export function control(st) {
   if (!st) return { label: "NO DATA", score: 0 };
   const { s, g } = st;
   if (s === "1") return { label: "COILING", score: 0 };
-  if (s === "3") return g >= 0 ? { label: "BUYERS WON THE FIGHT", score: 0.5 } : { label: "SELLERS WON THE FIGHT", score: -0.5 };
+  if (s === "3") return g > 0 ? { label: "BUYERS WON THE FIGHT", score: 0.5 } : g < 0 ? { label: "SELLERS WON THE FIGHT", score: -0.5 } : { label: "DEAD HEAT", score: 0 };
   if (s === "2u") return g >= 0 ? { label: "BUYERS IN CONTROL", score: 1 } : { label: "BREAKOUT FAILING", score: -0.25 };
   return g <= 0 ? { label: "SELLERS IN CONTROL", score: -1 } : { label: "BREAKDOWN FAILING", score: 0.25 };
 }
@@ -83,9 +105,18 @@ export function continuity(tfStates) {
 }
 
 // Everything we publish for one market: labels only, never prices.
+// Markets that trade on Sundays (Sunday-Thursday weeks) start their week on Sunday.
+// 24/7 markets (crypto) trade every day, so they keep Monday weeks.
+export function sundayWeek(daily) {
+  const days = daily.map((b) => new Date(b.d + "T00:00:00Z").getUTCDay());
+  const sun = days.filter((x) => x === 0).length, sat = days.filter((x) => x === 6).length;
+  return sun > daily.length * 0.1 && sat < daily.length * 0.05;
+}
+
 export function analyze(daily, histDays = 90) {
+  const sun = sundayWeek(daily);
   const tf = {};
-  for (const t of TIMEFRAMES) tf[t] = lastState(aggregate(daily, t));
+  for (const t of TIMEFRAMES) tf[t] = lastState(aggregate(daily, t, sun));
   const hist = [];
   for (let i = Math.max(1, daily.length - histDays); i < daily.length; i++) {
     hist.push([daily[i].d, scenario(daily[i], daily[i - 1]), color(daily[i])]);

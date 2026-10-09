@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { scenario, aggregate, analyze, control, continuity } from "../strat.js";
+import { scenario, aggregate, analyze, control, continuity, sundayWeek, reversal } from "../strat.js";
+import { parseChart, isLive } from "../yahoo.js";
 
 const b = (d, o, h, l, c) => ({ d, o, h, l, c });
 
@@ -36,5 +37,44 @@ assert.equal(control({ s: "2u", g: -1 }).label, "BREAKOUT FAILING");
 assert.equal(control({ s: "2d", g: -1 }).score, -1);
 assert.equal(continuity({ D: { g: 1 }, W: { g: 1 }, M: { g: 1 } }), 1);
 assert.equal(continuity({ D: { g: 1 }, W: { g: -1 } }), 0);
+
+// Sunday-start weeks: Sun 2026-10-04 and Thu 2026-10-08 are one week; Sun 2026-10-11 starts the next.
+const sa = [b("2026-10-04", 1, 2, 1, 2), b("2026-10-08", 1, 2, 1, 2), b("2026-10-11", 1, 2, 1, 2)];
+assert.deepEqual(aggregate(sa, "W", true).map((w) => w.d), ["2026-10-08", "2026-10-11"]);
+assert.deepEqual(aggregate(sa, "W", false).map((w) => w.d), ["2026-10-04", "2026-10-11"]); // Monday weeks put each Sunday in the week before
+const tadawul = [];
+for (let d = new Date("2026-06-07T00:00:00Z"); tadawul.length < 60; d.setUTCDate(d.getUTCDate() + 1)) {
+  if (d.getUTCDay() <= 4) tadawul.push(b(d.toISOString().slice(0, 10), 1, 2, 1, 2));
+}
+assert.equal(sundayWeek(tadawul), true);
+assert.equal(sundayWeek(daily), false);
+assert.equal(control({ s: "3", g: 0 }).score, 0);
+
+// Yahoo parser: exchange-local dates with per-bar DST, zero rows dropped, missing last close filled.
+const ts = (iso) => Date.parse(iso) / 1000;
+const chart = (rows, meta = {}) => ({ chart: { result: [{ meta: { exchangeTimezoneName: "America/New_York", ...meta },
+  timestamp: rows.map((r) => ts(r[0])), indicators: { quote: [{ open: rows.map((r) => r[1]), high: rows.map((r) => r[2]), low: rows.map((r) => r[3]), close: rows.map((r) => r[4]) }] } }] } });
+const p = parseChart(chart([
+  ["2026-07-01T04:00:00Z", 10, 11, 9, 10], // midnight New York in summer (EDT) -> 2026-07-01
+  ["2026-12-01T05:00:00Z", 10, 11, 9, 10], // midnight New York in winter (EST) -> 2026-12-01
+  ["2026-12-02T05:00:00Z", 0, 0, 0, null], // broken row -> dropped
+  ["2026-12-03T05:00:00Z", 10, 12, 9, null], // last row, close missing -> filled
+], { regularMarketPrice: 11.5 }));
+assert.deepEqual(p.map((x) => x.d), ["2026-07-01", "2026-12-01", "2026-12-03"]);
+assert.equal(p[2].c, 11.5);
+const live = { chart: { result: [{ meta: { currentTradingPeriod: { regular: { start: 100, end: 200 } } } }] } };
+assert.equal(isLive(live, 150), true);
+assert.equal(isLive(live, 250), false);
+
+// Reversals
+assert.equal(reversal({ q: ["2d", "1", "2u"], g: 1 }).name, "2-1-2 UP");
+assert.equal(reversal({ q: ["2u", "1", "2d"], g: -1 }).name, "2-1-2 DOWN");
+assert.equal(reversal({ q: ["3", "1", "2u"], g: 1 }).name, "3-1-2 UP");
+assert.equal(reversal({ q: ["1", "2u", "2d"], g: -1 }).name, "1-2-2 DOWN");
+assert.equal(reversal({ q: ["2u", "2d", "2u"], g: 1 }).name, "2-2 UP");
+assert.equal(reversal({ q: ["2u", "2u", "2u"], g: -1 }).name, "FAILED 2U");
+assert.equal(reversal({ q: ["2u", "2u", "2u"], g: 1 }), null); // continuation, not a reversal
+assert.equal(reversal({ q: ["2d", "1", "1"], g: 1 }), null);
+assert.deepEqual(a.tf.W.q, ["2u"]); // only two weeks of data -> one scenario
 
 console.log("strat engine: all tests pass");

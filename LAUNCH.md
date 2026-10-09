@@ -19,7 +19,7 @@ We copy the frame and change the subject: **a spy satellite for the world's mone
 2. **3-12 s.** The globe spins in FLIR (press `2`). "Hot = buying. Cold = selling. Every major market on Earth, every day."
 3. **12-25 s.** Press `M`. "This month, sellers control 16 of 36 countries." Click the top call (for example BUY BRAZIL). The globe swings to it and the target box locks.
 4. **25-35 s.** Drawer: "Price only does 3 things: breaks the high, breaks the low, or stays inside. Brazil broke last month's high, and the day, week, month, quarter and year all agree."
-5. **35-40 s.** "Money moves before the news does. Link in bio. It's free."
+5. **35-40 s.** "Price moved before the headline did. Check it yourself. Link in bio. It's free."
 
 Record at 1080×1920. Keep the cursor slow. Use FLIR or NVG for the thumbnail.
 
@@ -32,15 +32,22 @@ Record at 1080×1920. Keep the cursor slow. Use FLIR or NVG for the thumbnail.
 
 Attach a 15-second screen capture (globe spin → FLIR → click a country). Use the page's SHARE INTEL button for daily posts: it copies the day's calls and the link.
 
+## Ready-made clips in the page
+- **60-day replay** (press `R` or the ▶ button): the globe recolors day by day for 9 seconds. Screen-record it in FLIR for a Short.
+- **SAVE CARD**: a 1080×1350 image of the current view with the headline and calls. Post it as is.
+- **Reversals panel**: "24 markets just reversed" is a strong weekly hook.
+- **Your market card**: each viewer sees their own country first. Ask people to post theirs.
+
 ## Daily loop (makes it a series, not one post)
 - Every evening after the update, post the SHARE INTEL text plus a screenshot of the globe. Same time, same format.
 - Weekly (Friday): "East vs West" short, from the W bars.
 - Monthly / quarterly turn: the biggest content. "The month just closed: here is where the world's money moved."
 
 ## Before launch
-- [ ] Publish the repo and turn on GitHub Pages (see the command in the README / hand-off).
-- [ ] Run the workflow once by hand (Actions → Daily EOD update → Run). Check that Yahoo does not block the GitHub runner.
-- [ ] Add a 1200×630 share image (`og.png`) and `og:image` / `og:url` tags, so link previews show the globe.
+- [x] Publish the repo and turn on GitHub Pages: https://alexsopa.github.io/price-truth/
+- [x] Run the workflow on GitHub once: Yahoo answered all 97 markets.
+- [x] Share image (`og.png`) and `og:image` / `og:url` tags.
+- [ ] Tag Bilawal Sidhu (@bilawalsidhu) in the launch post and credit God's Eye View as the inspiration.
 - [ ] Optional: a custom domain (for example `godseye.thestrat.ai`) through a CNAME.
 
 Education, not investment advice. Keep the disclaimer in the footer and in the post text when you say "Buy" or "Sell".

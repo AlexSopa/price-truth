@@ -7,22 +7,33 @@
   <meta name="description" content="A spy satellite for the world's money. Every major stock market and bond market on Earth, read with TheStrat: who is really buying and who is really selling." />
   <meta property="og:title" content="God's Eye View · Price Truth" />
   <meta property="og:description" content="A spy satellite for the world's money. Headlines tell stories. Price tells the truth." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://alexsopa.github.io/price-truth/" />
+  <meta property="og:image" content="https://alexsopa.github.io/price-truth/og.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="God's Eye View · Price Truth" />
+  <meta name="twitter:description" content="A spy satellite for the world's money. Headlines tell stories. Price tells the truth." />
+  <meta name="twitter:image" content="https://alexsopa.github.io/price-truth/og.png" />
+  <link rel="canonical" href="https://alexsopa.github.io/price-truth/" />
+  <meta name="theme-color" content="#100f0d" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%2310b981' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%2310b981'/%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=JetBrains+Mono:wght@400..600&family=Space+Grotesk:wght@500..700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
-  <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js" defer></script>
-  <script type="module" src="app.js"></script>
+  <script src="vendor/d3.min.js" defer></script>
+  <script src="vendor/topojson-client.min.js" defer></script>
+  <script type="module" src="app.js?v=3"></script>
 </head>
 <body data-sensor="normal">
   <div id="boot" class="boot" aria-hidden="true"><pre id="bootlog"></pre></div>
 
   <div class="banner">
     <span>GOD'S EYE VIEW</span><span class="sep">//</span><span>PRICE TRUTH</span><span class="sep">//</span>
-    <span>SOURCE: PUBLIC MARKET DATA</span><span class="sep">//</span><span id="asof">ACQUIRING…</span>
+    <span>SOURCE: PUBLIC MARKET DATA</span><span class="sep">//</span><span id="asof">ACQUIRING…</span><span class="sep">//</span>
+    <a href="https://github.com/AlexSopa/price-truth" target="_blank" rel="noopener">FREE · OPEN SOURCE ↗</a>
   </div>
 
   <header class="bar">
@@ -32,7 +43,10 @@
       <span class="tag">a spy satellite for the world's money</span>
     </div>
     <div class="meta" id="tracking"></div>
-    <button class="share" id="share" type="button">SHARE INTEL ↗</button>
+    <div class="actions">
+      <button class="share ghost" id="card" type="button">SAVE CARD ⤓</button>
+      <button class="share" id="share" type="button">SHARE INTEL ↗</button>
+    </div>
   </header>
 
   <nav class="toolbar" aria-label="View controls">
@@ -43,14 +57,15 @@
     <div class="seg" id="sensorSeg" role="group" aria-label="Sensor mode">
       <button data-v="normal">NORMAL</button><button data-v="flir">FLIR</button><button data-v="nvg">NVG</button>
     </div>
-    <span class="hint">KEYS · D W M Q Y · S B · 1 2 3</span>
   </nav>
 
   <main class="ops">
     <section class="globe-wrap" aria-label="World map of buying and selling">
       <canvas id="globe"></canvas>
       <div class="hud tl"><div id="hudOrbit">SAT-01 // ORBIT</div><div id="hudMode">SENSOR NORMAL</div></div>
-      <div class="hud tr"><div><span class="rec"></span>REC</div><div id="hudTf">TF DAY</div></div>
+      <div class="hud tr"><div><span class="rec"></span>REC</div><div id="hudTf">TF DAY</div><div id="hudReplay" class="hud-replay"></div></div>
+      <div class="hud-headline" id="hudHeadline"></div>
+      <button class="replay" id="replayBtn" type="button">▶ REPLAY 60 DAYS</button>
       <div class="hud bl">
         <div class="legend"><span>SELLING</span><i id="legendBar"></i><span>BUYING</span></div>
         <div class="hud-dim">DRAG TO ROTATE · CLICK A COUNTRY</div>
@@ -60,6 +75,7 @@
     </section>
 
     <aside class="intel" aria-live="polite">
+      <div id="mine" hidden></div>
       <div class="kicker" id="kicker">SITUATION REPORT</div>
       <h1 id="headline">Acquiring signal…</h1>
       <p id="subline" class="subline"></p>
@@ -70,6 +86,7 @@
         <div class="tug-foot"><span id="tugWestTxt"></span><span id="tugEastTxt"></span></div>
       </div>
       <div class="calls" id="calls"></div>
+      <p class="disclaim">Education only. Not investment advice. BUY / SELL = who controls the price bar, not a trade recommendation.</p>
       <ul class="insights" id="insights"></ul>
     </aside>
   </main>
@@ -80,6 +97,18 @@
       <span class="panel-meta" id="countryMeta"></span>
     </div>
     <div class="grid" id="countryGrid"></div>
+  </section>
+
+  <section class="panel" id="reversals">
+    <div class="panel-head">
+      <h2>Reversals</h2>
+      <span class="panel-meta" id="revMeta"></span>
+    </div>
+    <div class="rev-tfs" id="revTfs"></div>
+    <div class="rev-cols">
+      <div><h3 class="rev-h up">↑ TURNING UP · sellers lost control</h3><div id="revUp"></div></div>
+      <div><h3 class="rev-h down">↓ TURNING DOWN · buyers lost control</h3><div id="revDown"></div></div>
+    </div>
   </section>
 
   <section class="panel">
@@ -102,12 +131,13 @@
     <div class="panel-head"><h2>How to read this</h2><span class="panel-meta">NO EXPERIENCE NEEDED</span></div>
     <p class="lead">Every market makes one bar per period: a day, a week, a month, a quarter, a year. We ask only one question: <b>did price break last period's high, its low, both, or neither?</b> That is TheStrat. No opinions. No news. Just what price did.</p>
     <div class="cards" id="howCards"></div>
-    <p class="fine">Bonds are read through government-bond fund prices. Bond prices falling = people selling that country's debt (its interest rates going up). "Full continuity" means the day, week, month, quarter and year all point the same way.</p>
+    <p class="fine">Bonds are read through government-bond fund prices. Bond prices falling = people selling that country's debt, so its interest rates go up. "All 5 timeframes green" means the day, week, month, quarter and year bars all trade above where they opened. Bars still trading are live and can change until they close.</p>
   </section>
 
   <footer class="foot">
     <p>Education, not investment advice. Market data from Yahoo Finance, read once per trading day after the close. This site shows only TheStrat bar labels, never prices. Not affiliated with Yahoo. Inspired by Bilawal Sidhu's <a href="https://github.com/bilawalsidhu/gods-eye-view" target="_blank" rel="noopener">God's Eye View</a>.</p>
     <p id="footData"></p>
+    <p>Keys: D W M Q Y timeframes · S stocks · B bonds · 1 2 3 sensors · R replay · Esc close.</p>
   </footer>
 
   <div class="drawer" id="drawer" hidden>
