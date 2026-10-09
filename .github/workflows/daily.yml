@@ -1,44 +1,83 @@
-name: Market update (your own copy)
-# Runs only in forks / copies of this repo, for the owner's personal use. It never runs in the original repo:
-# the public site uses each viewer's own free data key instead.
+name: Build and deploy
+# Publishes the site to GitHub Pages (Settings > Pages > Source: GitHub Actions). Market data is never committed.
+# - In this original repo without a GEV_PASSWORD secret: the site is published with no data (visitors use their own free key).
+# - With a GEV_PASSWORD secret (here or in your copy): your Yahoo data is published ENCRYPTED; only your password opens it.
+# - In your own copy without a password: your data is published as plain data/signals.json (you are the publisher).
 
 on:
+  push:
+    branches: [main]
   schedule:
     - cron: "20 * * * 1-5" # hourly on weekdays: every region's bar in force, open sessions included
     - cron: "20 21-23 * * 0" # Sunday evening UTC: New Zealand and Australia open Monday
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
   actions: write
 
 concurrency:
-  group: market-update
+  group: pages
   cancel-in-progress: false
 
 jobs:
-  build:
-    if: github.repository != 'AlexSopa/price-truth'
+  deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      GEV_PASSWORD: ${{ secrets.GEV_PASSWORD }}
+      ORIGINAL: ${{ github.repository == 'AlexSopa/price-truth' }}
     steps:
+      - name: Plan
+        id: plan
+        run: |
+          data=false
+          if [ "$ORIGINAL" != "true" ] || [ -n "$GEV_PASSWORD" ]; then data=true; fi
+          go=true
+          # Hourly runs only make sense when there is data to refresh.
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$data" != "true" ]; then go=false; fi
+          echo "data=$data" >> "$GITHUB_OUTPUT"
+          echo "go=$go" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v5
+        if: steps.plan.outputs.go == 'true'
       - uses: actions/setup-node@v5
+        if: steps.plan.outputs.go == 'true'
         with:
           node-version: 22
       - run: npm test
-      - run: npm run build
-      - name: Commit new labels
+        if: steps.plan.outputs.go == 'true'
+      - name: Market data (your own copy, or the owner's encrypted copy)
+        if: steps.plan.outputs.go == 'true' && steps.plan.outputs.data == 'true'
+        run: npm run build
+      - name: Assemble site
+        if: steps.plan.outputs.go == 'true'
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f data/signals.json
-          git diff --cached --quiet && exit 0
-          git commit -m "Market update $(date -u +'%F %H:%M') UTC"
-          git pull --rebase
-          git push
+          mkdir -p _site/data
+          cp index.html app.js style.css strat.js signals.js byok.js vault.js universe.js yahoo.js og.png _site/
+          cp -r vendor _site/
+          touch _site/.nojekyll
+          if [ -n "$GEV_PASSWORD" ]; then
+            cp data/signals.enc.json _site/data/
+          elif [ "$ORIGINAL" != "true" ] && [ -f data/signals.json ]; then
+            cp data/signals.json _site/data/
+          fi
+          ls -la _site _site/data
+      - uses: actions/configure-pages@v5
+        if: steps.plan.outputs.go == 'true'
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.plan.outputs.go == 'true'
+        with:
+          path: _site
+      - id: deployment
+        if: steps.plan.outputs.go == 'true'
+        uses: actions/deploy-pages@v4
       - name: Keep the schedule on (GitHub turns off schedules after 60 quiet days)
-        if: always()
+        if: always() && github.event_name == 'schedule'
         run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/daily.yml/enable"
         env:
           GH_TOKEN: ${{ github.token }}

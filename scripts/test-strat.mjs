@@ -141,3 +141,11 @@ assert.equal(sig.axis.length, daily.length);
 assert.equal(sig.markets[0].tl.D.length, daily.length);
 
 console.log("byok + signals: all tests pass");
+
+// ---- Owner vault ----
+const { seal, unseal } = await import("../vault.js");
+const secret = await seal({ hello: "world", n: [1, 2, 3] }, "correct horse battery staple");
+assert.equal(secret.ct.includes("world"), false);
+assert.deepEqual(await unseal(secret, "correct horse battery staple"), { hello: "world", n: [1, 2, 3] });
+await assert.rejects(unseal(secret, "wrong password"));
+console.log("vault: all tests pass");

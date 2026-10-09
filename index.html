@@ -67,6 +67,15 @@
         </li>
       </ol>
       <button class="share go" id="kgGo" type="submit" disabled>LAUNCH GOD'S EYE VIEW ▶</button>
+      <details class="owner" id="owner" hidden>
+        <summary>Owner access 🔒</summary>
+        <div class="owner-row">
+          <input id="ownerPass" type="password" autocomplete="current-password" placeholder="owner password">
+          <button class="share ghost" id="ownerGo" type="button">UNLOCK</button>
+        </div>
+        <label class="check"><input type="checkbox" id="ownerRemember"> Remember on this device</label>
+        <span class="owner-msg" id="ownerMsg" role="status"></span>
+      </details>
       <p class="gate-fine">Your browser fetches the data straight from your provider with your key. Nothing passes through this site. Your key and the data stay on this device. <a href="https://github.com/AlexSopa/price-truth" target="_blank" rel="noopener">Open source ↗</a> · Price action terms: <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">thestrat.ai/docs ↗</a></p>
     </form>
   </div>
@@ -75,7 +84,7 @@
 
   <div class="banner">
     <span>GOD'S EYE VIEW</span><span class="sep">//</span><span>PRICE TRUTH</span><span class="sep">//</span>
-    <span>SOURCE: YOUR OWN DATA KEY</span><span class="sep">//</span><span id="asof">ACQUIRING…</span><span class="sep">//</span>
+    <span id="srcTag">SOURCE: YOUR OWN DATA KEY</span><span class="sep">//</span><span id="asof">ACQUIRING…</span><span class="sep">//</span>
     <a href="https://github.com/AlexSopa/price-truth" target="_blank" rel="noopener">FREE · OPEN SOURCE ↗</a>
   </div>
 

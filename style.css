@@ -99,6 +99,12 @@ a { color: var(--accent); }
 .check { display: flex; gap: 8px; align-items: flex-start; margin-top: 4px; color: var(--fg); }
 .check input { margin-top: 3px; accent-color: var(--accent); }
 .share.go { padding: 11px 18px; font-size: 12px; }
+.owner { border-top: 1px solid var(--border); padding-top: 8px; }
+.owner[hidden] { display: none; }
+.owner summary { cursor: pointer; font: 600 10px var(--mono); color: var(--fg-3); letter-spacing: 0.1em; }
+.owner-row { display: flex; gap: 6px; margin: 8px 0 4px; }
+.owner-row input { flex: 1; background: var(--bg); border: 1px solid var(--border-hi); border-radius: var(--r); color: var(--fg); padding: 7px 10px; font: 12px var(--mono); }
+.owner-msg { font: 11px var(--mono); color: var(--down); }
 .share:disabled { opacity: 0.45; cursor: not-allowed; }
 .loadbar { height: 2px; background: var(--panel-3); }
 .loadbar[hidden] { display: none; }

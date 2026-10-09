@@ -34,6 +34,16 @@ With a local `data/signals.json`, the page uses it (97 markets, including local 
 
 Fork or "Use this template", then in your copy: Actions → enable workflows, run "Market update (your own copy)" once, and Settings → Pages → deploy from `main`. The workflow refreshes your copy hourly on trading days. It is switched off in this original repo. Note: free GitHub Pages sites are public, so you are the one publishing your copy.
 
+### 4. Owner access (your own full data, password-protected)
+
+Your hourly Yahoo build (97 markets, local indices and local bond funds) can sit on the same site for you only:
+
+1. Settings → Pages → Source: **GitHub Actions** (the workflow publishes the site; no data is ever committed to git).
+2. Add a repository secret named `GEV_PASSWORD` with a long passphrase (12+ characters): `gh secret set GEV_PASSWORD`.
+3. Run "Build and deploy" once (Actions tab, or `gh workflow run daily.yml`). It then refreshes hourly on trading days.
+
+The build encrypts the data (gzip → AES-256-GCM, key from your passphrase by PBKDF2-SHA256, 310,000 rounds) and publishes only `data/signals.enc.json`. On the site, open **Owner access 🔒** on the landing and enter the passphrase; the data is decrypted in your browser. Without the passphrase the file is unreadable. A weak passphrase can be guessed offline, so use a long one. **LOCK 🔒** forgets it on that device.
+
 ## How it works
 
 | File | Job |

@@ -2,6 +2,7 @@ import { COUNTRIES, BYOK_MARKETS } from "./universe.js?v=4";
 import { TIMEFRAMES, control, continuity, reversal, isTurn, decodeState, periodKey } from "./strat.js?v=4";
 import { buildSignals } from "./signals.js?v=4";
 import { PROVIDERS, loadMarkets, clearCache } from "./byok.js?v=4";
+import { unseal } from "./vault.js?v=4";
 
 const TF_NAME = { D: "Today", W: "This week", M: "This month", Q: "This quarter", Y: "This year" };
 const TF_WORD = { D: "day", W: "week", M: "month", Q: "quarter", Y: "year" };
@@ -80,9 +81,19 @@ const store = {
 async function tryOwnData() {
   try {
     const r = await fetch("data/signals.json", { cache: "no-cache" });
-    if (r.ok) return await r.json();
+    if (r.ok) return { plain: await r.json() };
   } catch {}
-  return null;
+  try {
+    const r = await fetch("data/signals.enc.json", { cache: "no-cache" });
+    if (r.ok) return { vault: await r.json() };
+  } catch {}
+  return {};
+}
+
+// Owner access: the owner's data is published encrypted. The password opens it in this browser only.
+const PW_KEY = "gev-owner-pass";
+async function openVault(vault, pw) {
+  try { return await unseal(vault, pw); } catch { return null; }
 }
 
 const KEYS_KEY = "gev-keys-v1";
@@ -92,8 +103,9 @@ const hasKey = (k) => !!(k.fmp || k.td);
 const agreed = () => { const t = Number(local.get(GATE_KEY)); return t && Date.now() - t < GATE_DAYS * 864e5; };
 
 // Landing: get a free key, paste it, agree to personal use, launch. Resolves with the keys.
-function keyGate(message = "") {
+function keyGate(message = "", vault = null) {
   const gate = $("#keygate"), keys = readKeys();
+  $("#owner").hidden = !vault;
   $("#keyFmp").value = keys.fmp ?? "";
   $("#keyTd").value = keys.td ?? "";
   $("#kgAgree").checked = !!agreed();
@@ -104,6 +116,17 @@ function keyGate(message = "") {
   check();
   gate.hidden = false;
   return new Promise((resolve) => {
+    $("#ownerGo").onclick = async () => {
+      const pw = $("#ownerPass").value;
+      if (!pw) return;
+      $("#ownerMsg").textContent = "Unlocking…";
+      const data = await openVault(vault, pw);
+      if (!data) { $("#ownerMsg").textContent = "Wrong password."; return; }
+      if ($("#ownerRemember").checked) local.set(PW_KEY, pw);
+      $("#ownerMsg").textContent = "";
+      gate.hidden = true;
+      resolve({ own: data });
+    };
     $("#kgForm").onsubmit = (e) => {
       e.preventDefault();
       if ($("#kgGo").disabled) return;
@@ -111,7 +134,7 @@ function keyGate(message = "") {
       saveKeys(k);
       local.set(GATE_KEY, String(Date.now()));
       gate.hidden = true;
-      resolve(k);
+      resolve({ keys: k });
     };
   });
 }
@@ -156,7 +179,7 @@ async function startByok(keys, force = false) {
     onAuthError(p, msg) {
       if (run !== byokRun) return;
       const k = readKeys(); delete k[p]; saveKeys(k);
-      if (!hasKey(k)) keyGate(`Your ${PROVIDERS[p].name} key was refused (${msg}). Check it and paste it again.`).then((nk) => startByok(nk));
+      if (!hasKey(k)) keyGate(`Your ${PROVIDERS[p].name} key was refused (${msg}). Check it and paste it again.`, ownerVault).then(launch);
     },
   });
   if (run !== byokRun) return;
@@ -168,7 +191,7 @@ async function startByok(keys, force = false) {
     state.data.failed = failed;
     renderHeader();
   } else {
-    keyGate("No data came back. Check your key, or try the other provider.").then((nk) => startByok(nk));
+    keyGate("No data came back. Check your key, or try the other provider.", ownerVault).then(launch);
   }
 }
 
@@ -1412,7 +1435,9 @@ async function main() {
     $("#headline").textContent = "Signal lost. Try again in a minute.";
     return;
   }
-  const own = await tryOwnData();
+  const found = await tryOwnData();
+  const own = found.plain;
+  ownerVault = found.vault ?? null;
   if (!own) endBoot(); // public site: the landing floats over the live globe
   fetch(WORLD_URL).then((r) => r.json()).then((w) => { globe = initGlobe(w, readHash().country || state.mine); }).catch(() => { $("#hudTarget").textContent = "MAP OFFLINE"; });
 
@@ -1425,19 +1450,47 @@ async function main() {
     bootLine("> ESTABLISHING UPLINK ............ OK");
     bootLine(`> CLASSIFYING ${own.markets.length * TIMEFRAMES.length} PRICE BARS [1 · 2U · 2D · 3] .. OK`);
     bootLine("> GOD'S EYE VIEW ONLINE.");
+    $("#srcTag").textContent = "SOURCE: YOUR OWN COPY";
     applyData(own);
     await wait(quick ? 0 : 700);
     endBoot();
     return;
   }
 
+  // Owner with a remembered password: open the owner's data at once.
+  const pw = ownerVault && local.get(PW_KEY);
+  if (pw) {
+    const data = await openVault(ownerVault, pw);
+    if (data) return startOwner(data);
+    local.set(PW_KEY, "");
+  }
+
   // Public site: bring your own key.
   $("#keysBtn").hidden = false;
-  $("#keysBtn").addEventListener("click", () => keyGate().then((k) => { clearCache().then(() => startByok(k, true)); }));
+  $("#keysBtn").addEventListener("click", () => keyGate("", ownerVault).then((r) => { if (r.keys) clearCache().then(() => startByok(r.keys, true)); else launch(r); }));
   $("#refreshBtn").hidden = false;
   $("#refreshBtn").addEventListener("click", () => startByok(readKeys(), true));
   const keys = readKeys();
-  startByok(hasKey(keys) && agreed() ? keys : await keyGate());
+  launch(hasKey(keys) && agreed() ? { keys } : await keyGate("", ownerVault));
+}
+
+let ownerVault = null;
+function launch(r) { return r.own ? startOwner(r.own) : startByok(r.keys); }
+function startOwner(data) {
+  byokRun++; // stop any key-based load
+  state.loading = false;
+  $("#loadBar").hidden = true;
+  $("#refreshBtn").hidden = true;
+  // Swap in a fresh button so no key-mode click handler stays attached.
+  const old = $("#keysBtn"), btn = old.cloneNode(false);
+  old.replaceWith(btn);
+  btn.hidden = false;
+  btn.textContent = "LOCK 🔒";
+  btn.title = "Forget the owner password on this device";
+  btn.addEventListener("click", () => { local.set(PW_KEY, ""); location.reload(); });
+  data.source = `${data.source} · owner access`;
+  $("#srcTag").textContent = "SOURCE: OWNER DATA (ENCRYPTED)";
+  applyData(data);
 }
 
 main();

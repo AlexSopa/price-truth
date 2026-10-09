@@ -64,4 +64,11 @@ if (fresh < MARKETS.length * 0.8) {
   process.exit(1);
 }
 await mkdir(new URL("../data/", import.meta.url), { recursive: true });
-await writeFile(OUT, JSON.stringify(out));
+if (process.env.GEV_PASSWORD) {
+  // Owner vault: publish only the encrypted file; the plain data never leaves this machine.
+  const { seal } = await import("../vault.js");
+  await writeFile(new URL("../data/signals.enc.json", import.meta.url), JSON.stringify(await seal(out, process.env.GEV_PASSWORD)));
+  console.log("wrote data/signals.enc.json (encrypted)");
+} else {
+  await writeFile(OUT, JSON.stringify(out));
+}
