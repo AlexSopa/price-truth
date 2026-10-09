@@ -266,6 +266,9 @@ function buildViews(tf) {
   return views;
 }
 
+// "A", "A and B", "A, B and C"
+const joinWords = (w) => (w.length < 2 ? w.join("") : `${w.slice(0, -1).join(", ")} and ${w.at(-1)}`);
+
 const callText = (v, asset, verdict) => `${verdict} ${v.name.toUpperCase()}${asset === "bonds" ? " BONDS" : ""}`;
 const rateWords = (verdict) => (verdict === "SELL" ? "bonds sold, yields rising" : verdict === "BUY" ? "bonds bought, yields falling" : "");
 
@@ -296,14 +299,26 @@ function renderIntel() {
   const sells = views.filter((v) => v.groups[asset].verdict === "SELL").length;
   const what = asset === "bonds" ? "bond markets" : "countries";
 
-  $("#kicker").textContent = `SITUATION REPORT · ${TF_HUD[tf]} BARS · ${asset.toUpperCase()}`;
+  $("#kicker").textContent = `SITUATION REPORT · ${TF_HUD[tf]} BARS · ${asset.toUpperCase()}${state.flow === "reversal" ? " · REVERSAL FLOW" : ""}`;
   let head;
   if (!n["2u"] && !n["2d"]) head = `${TF_NAME[tf]}, almost nothing broke out. The world is coiling.`;
   else if (n["2d"] > n["2u"]) head = `${TF_NAME[tf]}, <span class="down">${n["2d"]} of ${pool.length}</span> ${noun} on Earth broke below ${TF_PREV[tf]} low.`;
   else head = `${TF_NAME[tf]}, <span class="up">${n["2u"]} of ${pool.length}</span> ${noun} on Earth broke above ${TF_PREV[tf]} high.`;
+  let sub = `Sellers control ${sells} ${what}. Buyers control ${buys}. ${views.length - buys - sells} are undecided. Headlines tell stories. Price tells the truth.`;
+  if (state.flow === "reversal") {
+    // Reversal mode: say where the money is turning away from and where it is turning toward.
+    const { src, dst } = flowPairs((code) => revScore(code), FLOW_MIN.reversal);
+    const names = (arr) => joinWords(arr.slice(0, 3).map((p) => esc(state.views[p.code].name)));
+    head = src.length && dst.length
+      ? `${TF_NAME[tf]}, money is leaving <span class="down">${names(src)}</span> and going to <span class="up">${names(dst)}</span>.`
+      : `${TF_NAME[tf]}, money is not changing sides yet. No clear reversals.`;
+    const turns = state.data.markets.filter((m) => assetOf(m) === asset).map((m) => reversal(m.tf[tf])).filter(isTurn);
+    const up = turns.filter((r) => r.dir > 0).length;
+    sub = `${up} ${asset === "bonds" ? "bond markets" : "markets"} reversed up and ${turns.length - up} reversed down on the ${TF_WORD[tf]}. A reversal is the moment control of the price flips. Headlines tell stories. Price tells the truth.`;
+  }
   $("#headline").innerHTML = head;
   $("#hudHeadline").innerHTML = head;
-  $("#subline").textContent = `Sellers control ${sells} ${what}. Buyers control ${buys}. ${views.length - buys - sells} are undecided. Headlines tell stories. Price tells the truth.`;
+  $("#subline").textContent = sub;
 
   $("#counts").innerHTML = [
     ["up", n["2u"], "2U · broke the high"],
@@ -351,7 +366,7 @@ function renderIntel() {
   const { src, dst } = rev ? flowPairs((code) => revScore(code), FLOW_MIN.reversal) : flowPairs((code) => state.views[code]?.groups[asset]?.score);
   const names = (arr) => arr.slice(0, 3).map((p) => `${state.views[p.code].flag} ${esc(state.views[p.code].name)}`).join(", ");
   const k = `<span class="flow-k">${rev ? "REVERSAL FLOW" : "MONEY FLOW"} · ${TF_HUD[tf]}</span>`;
-  $("#flowLine").hidden = state.flow === "off";
+  $("#flowLine").hidden = state.flow !== "control"; // in reversal mode the headline says it
   $("#flowLine").innerHTML = src.length && dst.length
     ? `${k}${rev ? "Reversing down, money leaving" : "Out of"} <b class="down">${names(src)}</b> <span class="flow-arrow">→</span> ${rev ? "reversing up, money arriving in" : "into"} <b class="up">${names(dst)}</b>`
     : `${k}${rev ? "No country is reversing on both sides of the flow right now." : "No clear flow. Buyers and sellers are not in control anywhere."}`;
