@@ -91,33 +91,51 @@ export function aggregate(daily, tf, sunStart = false) {
   return out;
 }
 
-// Current-bar state on one timeframe: { s: scenario, g: color, q: last 3 scenarios (oldest first) }.
+// Current-bar state on one timeframe: { s, g, q: last 3 scenarios, qg: their colors (oldest first) }.
 export function lastState(bars) {
   if (bars.length < 2) return null;
   const n = bars.length;
-  const cur = bars[n - 1];
-  const q = [];
-  for (let i = Math.max(1, n - 3); i < n; i++) q.push(scenario(bars[i], bars[i - 1]));
-  return { s: q[q.length - 1], g: color(cur), q };
+  const q = [], qg = [];
+  for (let i = Math.max(1, n - 3); i < n; i++) { q.push(scenario(bars[i], bars[i - 1])); qg.push(color(bars[i])); }
+  return { s: q[q.length - 1], g: color(bars[n - 1]), q, qg };
 }
 
-// TheStrat reversal in force on the current bar, or null.
-// Returns { dir: 1 up / -1 down, name, story } — longest pattern first.
+// TheStrat signal in force on the current bar, named as in the TheStrat docs (thestrat.ai/docs):
+//   FAILED 2U / 2D           a 2 closing against its break (a 2 going 3)
+//   2-1-2 REV / CONT         2, inside bar, 2 against / with the first 2
+//   3-1-2 REV / CONT         3, inside bar, 2 against / with the color of the 3
+//   3-2 REV / CONT           3 then a 2 through its opposite side / its own direction
+//   1-2-2 REV, 3-2-2 REV, 2-2 REV   a 2 reversed straight back by the opposite 2
+// Returns { dir, name, kind: "rev" | "cont" | "failed" | "signal", doc } or null.
 export function reversal(st) {
   if (!st?.q) return null;
-  const [a, b, c] = st.q.length === 3 ? st.q : [null, ...st.q.slice(-2)];
+  const n = st.q.length;
+  const c = st.q[n - 1], b = st.q[n - 2] ?? null, a = st.q[n - 3] ?? null;
+  const gb = st.qg?.[n - 2], ga = st.qg?.[n - 3];
   const up = c === "2u", dn = c === "2d";
   if (!up && !dn) return null;
-  if (up && st.g < 0) return { dir: -1, name: "FAILED 2U", story: "Price broke the high but is closing red. Buyers are failing." };
-  if (dn && st.g > 0) return { dir: 1, name: "FAILED 2D", story: "Price broke the low but is closing green. Sellers are failing." };
-  const dir = up ? 1 : -1;
-  const against = up ? "2d" : "2u";
-  if (a === against && b === "1") return { dir, name: up ? "2-1-2 UP" : "2-1-2 DOWN", story: up ? "Sellers pushed, paused, then buyers broke out." : "Buyers pushed, paused, then sellers broke down." };
-  if (a === "3" && b === "1") return { dir, name: up ? "3-1-2 UP" : "3-1-2 DOWN", story: up ? "A big fight, a pause, then buyers broke out." : "A big fight, a pause, then sellers broke down." };
-  if (a === "1" && b === against) return { dir, name: up ? "1-2-2 UP" : "1-2-2 DOWN", story: up ? "Sellers broke out of a pause, failed, and buyers took over." : "Buyers broke out of a pause, failed, and sellers took over." };
-  if (b === against) return { dir, name: up ? "2-2 UP" : "2-2 DOWN", story: up ? "Sellers had control last bar. Buyers took it back this bar." : "Buyers had control last bar. Sellers took it back this bar." };
+  const dir = up ? 1 : -1, against = up ? "2d" : "2u";
+  const sig = (base, g3, doc) => {
+    // REV when the 2 counters the color of the 3, CONT when it confirms it. Unknown color: plain name.
+    if (!g3) return { dir, name: base, kind: "signal", doc };
+    const rev = (up && g3 < 0) || (dn && g3 > 0);
+    return { dir, name: `${base} ${rev ? "REV" : "CONT"}`, kind: rev ? "rev" : "cont", doc };
+  };
+  if (up && st.g < 0) return { dir: -1, name: "FAILED 2U", kind: "failed", doc: "failed2" };
+  if (dn && st.g > 0) return { dir: 1, name: "FAILED 2D", kind: "failed", doc: "failed2" };
+  if (b === "1" && a === "3") return sig("3-1-2", ga, "3-1-2");
+  if (b === "1" && (a === "2u" || a === "2d")) {
+    return a === against ? { dir, name: "2-1-2 REV", kind: "rev", doc: "2-1-2r" } : { dir, name: "2-1-2 CONT", kind: "cont", doc: "2-1-2c" };
+  }
+  if (b === "3") return sig("3-2", gb, "3-2");
+  if (b === against) {
+    if (a === "1") return { dir, name: "1-2-2 REV", kind: "rev", doc: "1-2-2" };
+    if (a === "3") return { dir, name: "3-2-2 REV", kind: "rev", doc: "3-2-2" };
+    return { dir, name: "2-2 REV", kind: "rev", doc: "2-2" };
+  }
   return null;
 }
+export const isTurn = (r) => !!r && (r.kind === "rev" || r.kind === "failed");
 
 // Who controls the bar, in plain words, and a score from -1 to +1.
 // A 2u that closes red is a failed break up; a 2d that closes green is a failed break down.

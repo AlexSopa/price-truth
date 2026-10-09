@@ -47,10 +47,11 @@
       <div class="clip-wrap">
         <button class="share ghost" id="clip" type="button" aria-haspopup="true">SAVE CLIP ⤓</button>
         <div class="clip-menu" id="clipMenu" hidden>
-          <button data-kind="video">VIDEO <small>MP4 / WEBM · 1080×1920 · 8s</small></button>
-          <button data-kind="gif">GIF <small>540×960 · 8s</small></button>
+          <button data-kind="page">PAGE <small>record this tab as you see it · STOP to end</small></button>
+          <button data-kind="video">VIDEO <small>this view · 9:16 · 8s</small></button>
+          <button data-kind="gif">GIF <small>this view · 540×960 · 8s</small></button>
           <button data-kind="png">IMAGE <small>PNG · 1080×1920</small></button>
-          <p>Tip: start a REPLAY first, then save. The clip records the replay.</p>
+          <p>VIDEO and GIF record the current view. If a replay is running, they record the replay.</p>
         </div>
       </div>
       <button class="share" id="share" type="button">SHARE INTEL ↗</button>
@@ -128,13 +129,13 @@
 
   <section class="panel" id="reversals">
     <div class="panel-head">
-      <h2>Reversals</h2>
+      <h2>Reversals &amp; Continuations</h2>
       <span class="panel-meta" id="revMeta"></span>
     </div>
     <div class="rev-tfs" id="revTfs"></div>
     <div class="rev-cols">
-      <div><h3 class="rev-h up">↑ TURNING UP · sellers lost control</h3><div id="revUp"></div></div>
-      <div><h3 class="rev-h down">↓ TURNING DOWN · buyers lost control</h3><div id="revDown"></div></div>
+      <div><h3 class="rev-h up">↑ UP · reversals and continuations</h3><div id="revUp"></div></div>
+      <div><h3 class="rev-h down">↓ DOWN · reversals and continuations</h3><div id="revDown"></div></div>
     </div>
   </section>
 
@@ -172,6 +173,18 @@
     <p id="footData"></p>
     <p>Keys: D W M Q Y timeframes · S stocks · B bonds · 1 2 3 sensors · G globe / flat · F money flow · + − zoom (or scroll / pinch) · R replay · Esc close.</p>
   </footer>
+
+  <div class="tip" id="tip" role="tooltip" hidden></div>
+  <div class="clip-result" id="clipResult" hidden role="dialog" aria-label="Your clip">
+    <div class="clip-card">
+      <div id="clipPreview"></div>
+      <div class="clip-actions">
+        <a class="share" id="clipSave" download>SAVE ⤓</a>
+        <button class="share ghost" id="clipShare" type="button" hidden>SHARE ↗</button>
+        <button class="share ghost" id="clipClose" type="button">CLOSE</button>
+      </div>
+    </div>
+  </div>
 
   <div class="drawer" id="drawer" hidden>
     <div class="drawer-card" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">

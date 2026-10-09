@@ -1,5 +1,5 @@
 import { COUNTRIES, MARKETS } from "./universe.js?v=3";
-import { TIMEFRAMES, control, continuity, analyze, reversal, decodeState, periodKey } from "./strat.js?v=3";
+import { TIMEFRAMES, control, continuity, analyze, reversal, isTurn, decodeState, periodKey } from "./strat.js?v=3";
 import { chartUrl, parseChart, isLive } from "./yahoo.js?v=3";
 
 const TF_NAME = { D: "Today", W: "This week", M: "This month", Q: "This quarter", Y: "This year" };
@@ -11,6 +11,32 @@ const S_LABEL = { "1": "1", "2u": "2U", "2d": "2D", "3": "3" };
 const WORLD_URL = "vendor/countries-110m.json";
 const RELAYS = []; // Add your own CORS relay URL prefixes here to allow ?relay= live mode on the public site.
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// Tooltip text quoted word for word from the TheStrat docs (thestrat.ai/docs). Shown on hover, not linked.
+const DOCS = {
+  "1": { t: "1 · Inside bar", src: "inside-bar", q: "The inside bar (Scenario 1) is an equilibrium: neither side took out the prior bar’s extremes. It must at least attempt to break, and which way it resolves is the signal." },
+  "2u": { t: "2U · Directional bar up", src: "price-only-trades-in-3-ways", q: "A 2u took out the prior high: buyers were willing to pay up. … A 2 is a trend: it shows you which group has control." },
+  "2d": { t: "2D · Directional bar down", src: "price-only-trades-in-3-ways", q: "A 2d took out the prior low: sellers were willing to sell down. A 2 is a trend: it shows you which group has control." },
+  "3": { t: "3 · Outside bar", src: "price-only-trades-in-3-ways", q: "Both sides broke. And unlike a 2, a 3 shows you both buyer and seller aggression in the same bar: sellers sold down through the prior low, then buyers bought up through the prior high, or the reverse." },
+  ftfc: { t: "FTFC · Full Timeframe Continuity", src: "full-timeframe-continuity", q: "Full timeframe continuity (FTFC) is the state where the last sale is on the same side of four aligned timeframe opens. … Investing continuity: yearly, quarterly, monthly, weekly. Or run them all at once: Y Q M W D 60 30 15 5.", note: "On this map: FTFC UP = last sale above the year, quarter, month, week and day opens. FTFC DN = below all five." },
+  failed2: { t: "Failed 2", src: "price-only-trades-in-3-ways", q: "A 2u trading red is a failed 2: buyers broke the prior high and sellers took the bar back, so it is a 2 going 3 and counts as evidence toward the new direction, not proof that buyers still have control." },
+  "2-2": { t: "2-2 REV", src: "2-2-reversal", q: "A 2-2 reversal is a breakout bar reversed straight back: a 2u followed by a 2d, or a 2d followed by a 2u." },
+  "1-2-2": { t: "1-2-2 REV · Two-bar rev-strat", src: "1-2-2", q: "The 1-2-2 is the two-bar rev-strat: an inside bar breaks in one direction, the break fails, and the next bar reverses through the failed-break bar’s extreme." },
+  "3-2-2": { t: "3-2-2 REV", src: "2-2-reversal", q: "The 3-2-2: an outside bar in front, a 2-2 reversal with a larger magnitude, trading back through a broadening formation." },
+  "2-1-2r": { t: "2-1-2 REV", src: "inside-bar", q: "2d-1-2u or 2u-1-2d: the break goes against the first move, trapping everyone who rode it through the pause." },
+  "2-1-2c": { t: "2-1-2 CONT", src: "inside-bar", q: "2u-1-2u or 2d-1-2d: the break goes with the first move. Most commonly used as a measured move: large move, brief pause, equal move." },
+  "3-1-2": { t: "3-1-2 · 312 Chicago", src: "3-1-2", q: "The 3-1-2, also called the “312 Chicago,” is an expansion (3) followed by a contraction or consolidation (1) followed by a directional move (2). … Reversal: the 2 counters the color of the 3. Continuation: the 2 confirms the color of the 3." },
+  "3-2": { t: "3-2", src: "3-2", q: "A 3-2 is an outside bar (3) followed directly by a 2 that breaks one of its sides. Break of the 3 bar’s opposite side is a reversal; break in the 3 bar’s direction is a continuation." },
+  reversal: { t: "Reversal", src: "types-of-reversals", q: "A reversal is a sequence of scenarios that changes trend, with a defined trigger and target." },
+};
+const tipAttr = (key, extra = "") => (DOCS[key] ? ` data-tip="${key}"${extra ? ` data-tipx="${esc(extra)}"` : ""}` : "");
+const SIGNAL_STORY = {
+  rev: ["Sellers had control. Buyers took it back.", "Buyers had control. Sellers took it back."],
+  cont: ["Buyers paused, then pushed on.", "Sellers paused, then pushed on."],
+  failed: ["Sellers broke the low but buyers are taking the bar back.", "Buyers broke the high but sellers are taking the bar back."],
+  signal: ["Breaking up out of the pattern.", "Breaking down out of the pattern."],
+};
+const story = (r) => SIGNAL_STORY[r.kind][r.dir > 0 ? 0 : 1];
 
 const state = { tf: "D", asset: "stocks", sensor: "normal", flow: "control", view: "globe", replayStep: "bar", replayRange: null, data: null, views: {}, focus: null, hover: null, mine: null, frame: null };
 
@@ -91,7 +117,7 @@ function flowPairs(scoreOf, min = 0.25) {
 function revScore(code, tf = state.tf, asset = state.asset) {
   const g = state.views[code]?.groups[asset];
   if (!g) return undefined;
-  return mean(g.members.map((m) => reversal(m.tf[tf])?.dir ?? 0));
+  return mean(g.members.map((m) => { const r = reversal(m.tf[tf]); return isTurn(r) ? r.dir : 0; }));
 }
 const FLOW_MIN = { control: 0.25, reversal: 0.01 };
 
@@ -158,7 +184,7 @@ function renderIntel() {
     ["down", n["2d"], "2D · broke the low"],
     ["", n["1"], "1 · coiling"],
     ["out", n["3"], "3 · broke both"],
-  ].map(([c, v, l]) => `<div class="count ${c}"><b>${v}</b><span>${l}</span></div>`).join("");
+  ].map(([c, v, l], i) => `<div class="count ${c}"${tipAttr(["2u", "2d", "1", "3"][i])}><b>${v}</b><span>${l}</span></div>`).join("");
 
   // East vs West
   const side = (s) => {
@@ -191,7 +217,7 @@ function renderIntel() {
   $("#calls").innerHTML = cards.length
     ? cards.map(({ v, g, agree }) => `<button class="call ${vClass(g.verdict)}" data-country="${v.code}">
           <b>${v.flag} ${esc(callText(v, asset, g.verdict))}</b>
-          <span>${esc(g.lead.name)} · ${S_LABEL[g.lead.tf[tf].s]} on the ${TF_WORD[tf]}${asset === "bonds" ? ` · ${rateWords(g.verdict)}` : ""}${agree ? " · ALL 5 TIMEFRAMES AGREE" : ""}</span></button>`).join("")
+          <span>${esc(g.lead.name)} · ${S_LABEL[g.lead.tf[tf].s]} on the ${TF_WORD[tf]}${asset === "bonds" ? ` · ${rateWords(g.verdict)}` : ""}${agree ? ` · <em${tipAttr("ftfc")}>FTFC ${g.verdict === "BUY" ? "UP" : "DN"}</em>` : ""}</span></button>`).join("")
     : `<div class="calls-empty">NO CLEAN CALLS ON THIS TIMEFRAME. THE WORLD IS UNDECIDED.</div>`;
 
   $("#insights").innerHTML = insights().map((t) => `<li>${t}</li>`).join("");
@@ -209,7 +235,7 @@ function renderIntel() {
 function insights() {
   const { tf } = state;
   const out = [];
-  const revs = state.data.markets.map((m) => reversal(m.tf[tf])).filter(Boolean);
+  const revs = state.data.markets.map((m) => reversal(m.tf[tf])).filter(isTurn);
   const ru = revs.filter((r) => r.dir > 0).length, rd = revs.length - ru;
   if (revs.length) out.push(`↺ <b>${ru}</b> markets are reversing up and <b>${rd}</b> are reversing down this ${TF_WORD[tf]}. <a href="#reversals">See them</a>.`);
   for (const v of Object.values(state.views)) {
@@ -281,11 +307,12 @@ function cells(m, selTf) {
     const st = m?.tf[t];
     if (!st) return `<span class="cell none"><small>${t}</small>–</span>`;
     const rev = reversal(st);
-    return `<span class="cell ${gClass(st.g)} s-${esc(st.s)}${t === selTf ? " sel" : ""}${rev ? " rev" : ""}" title="${esc(m.name)} · ${TF_WORD[t]}: ${esc(explain(st, TF_WORD[t]))}${rev ? ` Reversal: ${esc(rev.name)}.` : ""}"><small>${t}</small>${S_LABEL[st.s] ?? "?"}</span>`;
+    const extra = `${m.name} · ${TF_WORD[t]}: ${explain(st, TF_WORD[t])}${rev ? ` Signal: ${rev.name}.` : ""}`;
+    return `<span class="cell ${gClass(st.g)} s-${esc(st.s)}${t === selTf ? " sel" : ""}${rev ? " rev" : ""}"${tipAttr(st.s, extra)}><small>${t}</small>${S_LABEL[st.s] ?? "?"}</span>`;
   }).join("");
 }
 
-const ftfcTag = (ftfc) => (ftfc ? `<div class="ftfc-tag ${ftfc > 0 ? "up" : "down"}">${ftfc > 0 ? "▲ ALL 5 TIMEFRAMES GREEN" : "▼ ALL 5 TIMEFRAMES RED"}</div>` : "");
+const ftfcTag = (ftfc) => (ftfc ? `<div class="ftfc-tag ${ftfc > 0 ? "up" : "down"}"${tipAttr("ftfc")}>${ftfc > 0 ? "▲ FTFC UP" : "▼ FTFC DN"}</div>` : "");
 
 function renderCountries() {
   const { tf, asset } = state;
@@ -300,7 +327,7 @@ function renderCountries() {
     return `<button class="tile ${g?.ftfc > 0 ? "ftfc-up" : g?.ftfc < 0 ? "ftfc-down" : ""}${g ? "" : " dim"}" data-country="${v.code}">
       <div class="cap"><span class="name">${v.flag} ${esc(v.name)}<span class="side">${v.side.toUpperCase()}</span></span>
       <span class="verdict ${vClass(verdict)}">${esc(verdict)}</span></div>
-      ${rows}${ftfcTag(g?.ftfc)}${rev ? `<div class="rev-tag ${rev.dir > 0 ? "up" : "down"}">↺ ${esc(rev.name)} on the ${TF_WORD[tf]}</div>` : ""}
+      ${rows}${ftfcTag(g?.ftfc)}${rev ? `<div class="rev-tag ${rev.dir > 0 ? "up" : "down"}"${tipAttr(rev.doc)}>↺ ${esc(rev.name)} on the ${TF_WORD[tf]}</div>` : ""}
     </button>`;
   }).join("");
 
@@ -316,7 +343,7 @@ function renderCountries() {
 
 /* ---------- Render: reversals ---------- */
 
-const REV_RANK = (r) => (r.name.startsWith("FAILED") ? 2 : r.name.startsWith("2-2") ? 1 : 0);
+const REV_RANK = (r) => ({ rev: 0, failed: 1, cont: 2, signal: 3 })[r.kind] * 10 + (r.name.startsWith("2-2") ? 1 : 0);
 
 function renderReversals() {
   const { tf } = state;
@@ -325,20 +352,21 @@ function renderReversals() {
   $("#revTfs").innerHTML = byTf;
   const col = (dir) => {
     const rows = all.filter((x) => x.r.dir === dir).sort((a, b) => REV_RANK(a.r) - REV_RANK(b.r));
-    if (!rows.length) return `<div class="rev-empty">No ${dir > 0 ? "upside" : "downside"} reversals on the ${TF_WORD[tf]}.</div>`;
+    if (!rows.length) return `<div class="rev-empty">No ${dir > 0 ? "upside" : "downside"} signals on the ${TF_WORD[tf]}.</div>`;
     const open = state.revAll;
     const more = !open && rows.length > 12 ? `<button class="rev-more" data-revall="1">SHOW ALL ${rows.length} ↓</button>` : "";
     return rows.slice(0, open ? rows.length : 12).map(({ m, r }) => {
       const c = COUNTRIES[m.country];
       return `<button class="rev-row" ${m.country !== "GLOBAL" ? `data-country="${m.country}"` : ""}>
         <span class="rev-name">${c.flag} ${esc(m.name)}<small>${esc(m.country === "GLOBAL" ? m.kind.toUpperCase() : c.name.toUpperCase())}</small></span>
-        <span class="rev-chip ${dir > 0 ? "up" : "down"}">${esc(r.name)}</span>
-        <span class="rev-story">${esc(r.story)}</span></button>`;
+        <span class="rev-chip ${dir > 0 ? "up" : "down"} k-${r.kind}"${tipAttr(r.doc)}>${esc(r.name)}</span>
+        <span class="rev-story">${esc(story(r))}</span></button>`;
     }).join("") + more;
   };
   $("#revUp").innerHTML = col(1);
   $("#revDown").innerHTML = col(-1);
-  $("#revMeta").textContent = `${all.length} MARKETS REVERSING ON THE ${TF_HUD[tf]} · PATTERNS: 2-1-2 · 3-1-2 · 1-2-2 · 2-2 · FAILED 2`;
+  const turns = all.filter((x) => isTurn(x.r)).length;
+  $("#revMeta").textContent = `${turns} REVERSING · ${all.length - turns} CONTINUING · ${TF_HUD[tf]} BARS · HOVER A SIGNAL FOR THE TheStrat DOCS DEFINITION`;
 }
 
 /* ---------- Render: global pulse (daily breadth) ---------- */
@@ -400,14 +428,16 @@ function buildReplay(asset, tf, step, days) {
     const done = []; // final scenario of each completed bar
     let lastKey = null, last = null;
     for (let i = 0; i < axis.length; i++) {
-      if (lastKey !== null && keys[i] !== lastKey && last) done.push(last.s);
+      if (lastKey !== null && keys[i] !== lastKey && last) done.push(last);
       lastKey = keys[i];
       last = decodeState(line[i]);
       const f = at.get(i);
       if (!f || !last) continue;
       f.sum[m.country] = (f.sum[m.country] ?? 0) + control(last).score;
       f.cnt[m.country] = (f.cnt[m.country] ?? 0) + 1;
-      f.rsum[m.country] = (f.rsum[m.country] ?? 0) + (reversal({ q: [...done.slice(-2), last.s], g: last.g })?.dir ?? 0);
+      const prev2 = done.slice(-2);
+      const r = reversal({ q: [...prev2.map((x) => x.s), last.s], qg: [...prev2.map((x) => x.g), last.g], g: last.g });
+      f.rsum[m.country] = (f.rsum[m.country] ?? 0) + (isTurn(r) ? r.dir : 0);
       if (last.s === "2u") f.up++;
       if (last.s === "2d") f.down++;
     }
@@ -490,7 +520,7 @@ function sparkSvg(m, tf) {
     out += `<line x1="${x}" x2="${x}" y1="${y(h)}" y2="${y(l)}" class="wick ${cls}"/>`;
     out += `<rect x="${x - bw / 2}" y="${y(Math.max(o, c))}" width="${bw}" height="${Math.max(1.2, Math.abs(y(o) - y(c)))}" class="body ${cls}${i === n - 1 ? " cur" : ""}"/>`;
   }
-  const labels = sp.s.map((s) => `<i class="s-${esc(s)}">${S_LABEL[s] ?? ""}</i>`).join("");
+  const labels = sp.s.map((s) => `<i class="s-${esc(s)}"${tipAttr(s)}>${S_LABEL[s] ?? ""}</i>`).join("");
   return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Last ${n} ${TF_WORD[tf]} bars of ${esc(m.name)}">${out}</svg>
     <div class="spark-lbls" style="grid-template-columns:repeat(${n},1fr)">${labels}</div>
     <div class="spark-cap"><span>LAST ${n} ${TF_HUD[tf]} BARS · SHAPE ONLY</span><span>${m.live ? "● CURRENT BAR LIVE" : "DOTTED = LAST BAR'S HIGH / LOW"}</span></div>`;
@@ -513,7 +543,7 @@ function openCountry(code, refocus = true) {
       ${sparkSvg(m, tf)}
       <div class="row five">${cells(m, tf)}</div>
       <p>${esc(explain(m.tf[tf], TF_WORD[tf]))}</p>
-      ${rev ? `<p class="dr-rev ${rev.dir > 0 ? "up" : "down"}">↺ ${esc(rev.name)} on the ${TF_WORD[tf]}: ${esc(rev.story)}</p>` : ""}
+      ${rev ? `<p class="dr-rev ${rev.dir > 0 ? "up" : "down"}"><span${tipAttr(rev.doc)}>↺ ${esc(rev.name)}</span> on the ${TF_WORD[tf]}: ${esc(story(rev))}</p>` : ""}
       ${others.length ? `<p class="dr-also">Also reversing: ${others.map(([t, r]) => `${esc(r.name)} (${TF_WORD[t]})`).join(" · ")}</p>` : ""}
       <div class="seq"><em>LAST 12 DAYS</em>${m.hist.slice(-12).map(([d, s, gg]) => `<i class="${gClass(gg)}" title="${esc(d)}">${S_LABEL[s] ?? "?"}</i>`).join("")}</div></div>`;
   };
@@ -956,29 +986,85 @@ function composeCard(x, W, H) {
   x.fillText("Headlines tell stories. Price tells the truth. Not advice.", 60 * k, 1875 * k);
 }
 
+// Show the finished file with a SAVE button. A direct click on SAVE always downloads,
+// even when the browser blocks downloads that start on their own after a recording.
+let lastClipUrl = null;
 function deliver(blob, ext) {
-  const file = new File([blob], `gods-eye-view-${state.view}-${state.tf}-${state.data.generatedAt.slice(0, 10)}.${ext}`, { type: blob.type });
-  if (matchMedia("(pointer: coarse)").matches && navigator.canShare?.({ files: [file] })) {
-    return navigator.share({ files: [file], text: shareText() }).catch(() => {});
-  }
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = file.name;
-  document.body.append(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  const name = `gods-eye-view-${state.view}-${state.tf}-${state.data.generatedAt.slice(0, 10)}.${ext}`;
+  if (lastClipUrl) URL.revokeObjectURL(lastClipUrl);
+  lastClipUrl = URL.createObjectURL(blob);
+  const file = new File([blob], name, { type: blob.type });
+  const isVideo = blob.type.startsWith("video/");
+  $("#clipPreview").innerHTML = isVideo
+    ? `<video src="${lastClipUrl}" autoplay loop muted playsinline></video>`
+    : `<img src="${lastClipUrl}" alt="Saved clip preview">`;
+  const save = $("#clipSave");
+  save.href = lastClipUrl; save.download = name;
+  save.textContent = `SAVE ${ext.toUpperCase()} ⤓ · ${(blob.size / 1e6).toFixed(1)} MB`;
+  const canShare = navigator.canShare?.({ files: [file] });
+  $("#clipShare").hidden = !canShare;
+  $("#clipShare").onclick = () => navigator.share({ files: [file], text: shareText() }).catch(() => {});
+  $("#clipResult").hidden = false;
 }
 
 const VIDEO_TYPES = ["video/mp4;codecs=avc1.42E01E", "video/mp4", "video/webm;codecs=vp9", "video/webm"];
-let recording = false;
+let recording = false, stopPage = null;
 function clipStatus(text) { $("#clip").textContent = text; }
+const pickMime = () => window.MediaRecorder && VIDEO_TYPES.find((t) => MediaRecorder.isTypeSupported(t));
 
-// Save a clip of the moving map: VIDEO (MP4 or WebM), GIF, or a still PNG.
-// If a replay is running, the clip records the rest of the replay (up to 20 s).
+function recordStream(stream, mime, until) {
+  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8e6 });
+  const chunks = [];
+  rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+  const stopped = new Promise((r) => { rec.onstop = r; });
+  rec.start(250);
+  return until.then(async () => {
+    if (rec.state !== "inactive") rec.stop();
+    await stopped;
+    return new Blob(chunks, { type: mime.split(";")[0] });
+  });
+}
+
+// PAGE: record this browser tab exactly as it looks (asks the browser for permission), until STOP or 60 s.
+async function recordPage() {
+  const mime = pickMime();
+  if (!navigator.mediaDevices?.getDisplayMedia || !mime) { alertClip("This browser cannot record the page. Try Chrome or Edge on a computer."); return; }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: false, preferCurrentTab: true, selfBrowserSurface: "include", surfaceSwitching: "exclude" });
+  } catch { return; } // the viewer cancelled the prompt
+  const t0 = performance.now();
+  const until = new Promise((resolve) => {
+    stopPage = resolve;
+    stream.getVideoTracks()[0].addEventListener("ended", resolve);
+    const timer = setInterval(() => {
+      const sec = Math.floor((performance.now() - t0) / 1000);
+      clipStatus(`■ STOP · ${sec}s`);
+      if (sec >= 60) resolve();
+    }, 250);
+    resolve.timer = timer;
+  });
+  const blob = await recordStream(stream, mime, until);
+  clearInterval(stopPage?.timer);
+  stopPage = null;
+  stream.getTracks().forEach((t) => t.stop());
+  deliver(blob, blob.type === "video/mp4" ? "mp4" : "webm");
+}
+function alertClip(msg) {
+  $("#clipPreview").innerHTML = `<p class="clip-msg">${esc(msg)}</p>`;
+  $("#clipSave").removeAttribute("href"); $("#clipSave").textContent = "—"; $("#clipShare").hidden = true;
+  $("#clipResult").hidden = false;
+}
+
+// Save a clip: VIDEO (MP4 or WebM) or GIF of the current view (8 s, or a running replay up to 20 s),
+// PAGE (the whole tab), or a still PNG.
 async function saveClip(kind) {
   if (recording) return;
   $("#clipMenu").hidden = true;
   recording = true;
   globe?.hold(true);
   try {
+    if (kind === "page") { await recordPage(); return; }
     const gif = kind === "gif";
     const W = gif ? 540 : 1080, H = gif ? 960 : 1920;
     const c = document.createElement("canvas");
@@ -987,30 +1073,33 @@ async function saveClip(kind) {
     if (kind === "png") {
       composeCard(x, W, H);
       const blob = await new Promise((r) => c.toBlob(r, "image/png"));
-      if (blob) await deliver(blob, "png");
+      if (blob) deliver(blob, "png");
       return;
     }
     const dur = replayTimer ? Math.min(20000, Math.max(3000, replayEnds - performance.now())) : 8000;
     const t0 = performance.now();
-    const tick = () => clipStatus(`● REC ${Math.ceil((dur - (performance.now() - t0)) / 1000)}s`);
+    const left = () => Math.max(0, Math.ceil((dur - (performance.now() - t0)) / 1000));
 
     if (!gif) {
-      const mime = window.MediaRecorder && VIDEO_TYPES.find((t) => MediaRecorder.isTypeSupported(t));
-      if (!mime) return saveClip("gif");
-      const rec = new MediaRecorder(c.captureStream(30), { mimeType: mime, videoBitsPerSecond: 8e6 });
-      const chunks = [];
-      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-      const stopped = new Promise((r) => { rec.onstop = r; });
+      const mime = pickMime();
+      if (!mime) { recording = false; globe?.hold(false); return saveClip("gif"); }
       composeCard(x, W, H);
-      rec.start(250);
-      await new Promise((done) => {
-        const loop = () => { composeCard(x, W, H); tick(); performance.now() - t0 < dur ? requestAnimationFrame(loop) : done(); };
-        requestAnimationFrame(loop);
+      // Animation frames give smooth frames while the tab is visible; the timer keeps the
+      // recording moving (and finishing) if the viewer switches to another tab.
+      const until = new Promise((done) => {
+        let last = 0, finished = false, iv = 0;
+        const step = () => {
+          if (finished) return;
+          const now = performance.now();
+          if (now - last >= 30) { last = now; composeCard(x, W, H); clipStatus(`● REC ${left()}s`); }
+          if (now - t0 >= dur) { finished = true; clearInterval(iv); done(); }
+        };
+        iv = setInterval(step, 33);
+        const raf = () => { step(); if (!finished) requestAnimationFrame(raf); };
+        requestAnimationFrame(raf);
       });
-      rec.stop();
-      await stopped;
-      const type = mime.split(";")[0];
-      await deliver(new Blob(chunks, { type }), type === "video/mp4" ? "mp4" : "webm");
+      const blob = await recordStream(c.captureStream(30), mime, until);
+      deliver(blob, blob.type === "video/mp4" ? "mp4" : "webm");
       return;
     }
 
@@ -1024,16 +1113,41 @@ async function saveClip(kind) {
       const { data } = x.getImageData(0, 0, W, H);
       const palette = quantize(data, 128, { format: "rgb444" });
       enc.writeFrame(applyPalette(data, palette, "rgb444"), W, H, { palette, delay: 1000 / fps });
-      tick();
+      clipStatus(`● REC ${left()}s`);
     }
     enc.finish();
     clipStatus("ENCODING…");
-    await deliver(new Blob([enc.bytes()], { type: "image/gif" }), "gif");
+    deliver(new Blob([enc.bytes()], { type: "image/gif" }), "gif");
+  } catch (err) {
+    alertClip(`Recording failed: ${err?.message ?? err}`);
   } finally {
     recording = false;
     globe?.hold(false);
     clipStatus("SAVE CLIP ⤓");
   }
+}
+
+/* ---------- Docs tooltips ---------- */
+
+function showTip(el) {
+  const d = DOCS[el.dataset.tip];
+  if (!d) return;
+  const tip = $("#tip");
+  tip.innerHTML = `${el.dataset.tipx ? `<span class="tip-x">${esc(el.dataset.tipx)}</span>` : ""}<b>${esc(d.t)}</b><q>${esc(d.q)}</q>${d.note ? `<span class="tip-note">${esc(d.note)}</span>` : ""}<cite>TheStrat docs · thestrat.ai/docs/${esc(d.src)}</cite>`;
+  tip.hidden = false;
+  const r = el.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
+  let x = Math.min(Math.max(8, r.left + r.width / 2 - tw / 2), innerWidth - tw - 8);
+  let y = r.bottom + 8;
+  if (y + th > innerHeight - 8) y = Math.max(8, r.top - th - 8);
+  tip.style.left = `${x}px`; tip.style.top = `${y}px`;
+}
+function hideTip() { $("#tip").hidden = true; }
+function wireTips() {
+  document.addEventListener("mouseover", (e) => { const el = e.target.closest("[data-tip]"); el ? showTip(el) : hideTip(); });
+  document.addEventListener("focusin", (e) => { const el = e.target.closest("[data-tip]"); el ? showTip(el) : hideTip(); });
+  document.addEventListener("scroll", hideTip, { passive: true });
+  // Touch: tap a label to read it (labels inside tiles still open the country on tap).
+  document.addEventListener("touchstart", (e) => { const el = e.target.closest("[data-tip]"); el ? showTip(el) : hideTip(); }, { passive: true });
 }
 
 /* ---------- Controls, URL state ---------- */
@@ -1080,7 +1194,12 @@ function wireControls() {
   $("#drawerClose").addEventListener("click", closeDrawer);
   $("#drawer").addEventListener("click", (e) => { if (e.target.id === "drawer" && e.detail < 2) closeDrawer(); });
   $("#share").addEventListener("click", share);
-  $("#clip").addEventListener("click", (e) => { e.stopPropagation(); if (!recording) $("#clipMenu").hidden = !$("#clipMenu").hidden; });
+  $("#clip").addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (stopPage) { stopPage(); return; }
+    if (!recording) $("#clipMenu").hidden = !$("#clipMenu").hidden;
+  });
+  $("#clipClose").addEventListener("click", () => { $("#clipResult").hidden = true; $("#clipPreview").innerHTML = ""; });
   $("#clipMenu").addEventListener("click", (e) => { const b = e.target.closest("[data-kind]"); if (b) saveClip(b.dataset.kind); });
   document.addEventListener("click", (e) => { if (!e.target.closest(".clip-wrap")) $("#clipMenu").hidden = true; });
   $("#replayBtn").addEventListener("click", startReplay);
@@ -1136,8 +1255,9 @@ function renderHow() {
     ["1 · Coiling", "Price stayed inside the last range. Nobody has won yet. Watch which side breaks.", candle(prev, [38, 62, 42, 55], "var(--fg-2)")],
     ["3 · Broke both", "Price broke both sides. Buyers and sellers fought, and the close shows who is winning.", candle(prev, [10, 95, 30, 85], "var(--gold)")],
     ["→ Money flow", "CONTROL arcs run from countries where sellers control the bar to countries where buyers do. REVERSALS arcs run from markets reversing down to markets reversing up. They show pressure, not tracked transfers.", candle([20, 50, 45, 25], [35, 80, 40, 75], "var(--accent)")],
-    ["↺ Reversal", "Control flipped. Example 2-1-2: sellers broke the low, price paused inside, then buyers broke the high.", candle([20, 50, 45, 25], [35, 80, 40, 75], "var(--up)")],
-  ].map(([t, p, svg]) => `<div class="card">${svg}<div><h3>${t}</h3><p>${p}</p></div></div>`).join("");
+    ["↺ Reversal (REV)", "Control flipped. Example 2-1-2 REV: sellers broke the low, price paused inside, then buyers broke the high. CONT = the break goes with the first move.", candle([20, 50, 45, 25], [35, 80, 40, 75], "var(--up)")],
+    ["FTFC UP / DN", "Full Timeframe Continuity: price above (UP) or below (DN) the open of the year, quarter, month, week and day.", candle([30, 70, 40, 60], [45, 92, 50, 85], "var(--up)")],
+  ].map(([t, p, svg], i) => `<div class="card"${tipAttr(["2u", "2d", "1", "3", null, "reversal", "ftfc"][i])}>${svg}<div><h3>${t}</h3><p>${p}</p></div></div>`).join("");
 }
 
 /* ---------- Boot ---------- */
@@ -1185,6 +1305,7 @@ async function main() {
 
   state.mine = detectCountry();
   wireControls();
+  wireTips();
   renderHow();
   renderPulse();
   const { patch, country } = readHash();

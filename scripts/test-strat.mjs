@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { scenario, aggregate, analyze, control, continuity, sundayWeek, reversal, spark, timeline, decodeState, encodeState, periodKey } from "../strat.js";
+import { scenario, aggregate, analyze, control, continuity, sundayWeek, reversal, spark, timeline, decodeState, encodeState, periodKey, lastState } from "../strat.js";
 import { parseChart, isLive } from "../yahoo.js";
 
 const b = (d, o, h, l, c) => ({ d, o, h, l, c });
@@ -69,16 +69,25 @@ assert.equal(isLive(live, day + 7200), false); // session closed
 live.chart.result[0].timestamp = [day - 86400];
 assert.equal(isLive(live, day), false); // last bar is yesterday's
 
-// Reversals
-assert.equal(reversal({ q: ["2d", "1", "2u"], g: 1 }).name, "2-1-2 UP");
-assert.equal(reversal({ q: ["2d", "1", "2u"], g: -1 }).name, "FAILED 2U"); // a red 2u is not a reversal up
-assert.equal(reversal({ q: ["2u", "1", "2d"], g: -1 }).name, "2-1-2 DOWN");
-assert.equal(reversal({ q: ["3", "1", "2u"], g: 1 }).name, "3-1-2 UP");
-assert.equal(reversal({ q: ["1", "2u", "2d"], g: -1 }).name, "1-2-2 DOWN");
-assert.equal(reversal({ q: ["2u", "2d", "2u"], g: 1 }).name, "2-2 UP");
-assert.equal(reversal({ q: ["2u", "2u", "2u"], g: -1 }).name, "FAILED 2U");
-assert.equal(reversal({ q: ["2u", "2u", "2u"], g: 1 }), null); // continuation, not a reversal
-assert.equal(reversal({ q: ["2d", "1", "1"], g: 1 }), null);
+// Signals, named as in the TheStrat docs
+const R = (q, qg, g) => reversal({ q, qg, g })?.name ?? null;
+assert.equal(R(["2d", "1", "2u"], [-1, 1, 1], 1), "2-1-2 REV");
+assert.equal(R(["2u", "1", "2u"], [1, 1, 1], 1), "2-1-2 CONT");
+assert.equal(R(["2u", "1", "2d"], [1, 1, -1], -1), "2-1-2 REV");
+assert.equal(R(["2d", "1", "2u"], [-1, 1, -1], -1), "FAILED 2U"); // a red 2u is a failed 2, not a reversal up
+assert.equal(R(["3", "1", "2u"], [-1, 1, 1], 1), "3-1-2 REV"); // 2u counters a red 3
+assert.equal(R(["3", "1", "2u"], [1, 1, 1], 1), "3-1-2 CONT"); // 2u confirms a green 3
+assert.equal(R(["3", "1", "2d"], [1, 1, -1], -1), "3-1-2 REV");
+assert.equal(R(["1", "3", "2d"], [1, 1, -1], -1), "3-2 REV"); // 3 up, then a 2d through its low
+assert.equal(R(["1", "3", "2u"], [1, 1, 1], 1), "3-2 CONT");
+assert.equal(R(["1", "2u", "2d"], [1, 1, -1], -1), "1-2-2 REV");
+assert.equal(R(["3", "2d", "2u"], [1, -1, 1], 1), "3-2-2 REV");
+assert.equal(R(["2u", "2d", "2u"], [1, -1, 1], 1), "2-2 REV");
+assert.equal(R(["2u", "2u", "2u"], [1, 1, 1], 1), null); // trend, no signal
+assert.equal(R(["2d", "1", "1"], [-1, 1, 1], 1), null);
+assert.equal(R(["3", "1", "2u"], undefined, 1), "3-1-2"); // old data without colors
+assert.equal(reversal({ q: ["2d", "1", "2u"], qg: [-1, 1, 1], g: 1 }).kind, "rev");
+assert.deepEqual(lastState(daily).qg, [1, 1, 1]);
 assert.deepEqual(a.tf.W.q, ["2u"]); // only two weeks of data -> one scenario
 
 // Chart shapes: scaled 0-999 inside the window, scenario per bar.
