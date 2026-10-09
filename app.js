@@ -45,6 +45,29 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const assetOf = (m) => (m.kind === "bond" ? "bonds" : m.kind === "index" || m.kind === "stock" ? "stocks" : m.kind);
 const gClass = (g) => (g > 0 ? "g-up" : g < 0 ? "g-down" : "");
 const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
+const local = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+const GATE_KEY = "gev-personal-use-v1";
+const GATE_DAYS = 30;
+
+// Nothing loads until the viewer confirms personal, non-commercial use. Remembered for 30 days on this device.
+function personalUseGate() {
+  const t = Number(local.get(GATE_KEY));
+  if (t && Date.now() - t < GATE_DAYS * 864e5) return Promise.resolve();
+  const gate = $("#gate");
+  gate.hidden = false;
+  $("#gateAgree").focus();
+  return new Promise((resolve) => {
+    $("#gateAgree").addEventListener("click", () => {
+      local.set(GATE_KEY, String(Date.now()));
+      gate.hidden = true;
+      resolve();
+    }, { once: true });
+  });
+}
+
 const store = {
   get(k) { try { return sessionStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { sessionStorage.setItem(k, v); } catch {} },
@@ -1133,7 +1156,7 @@ function showTip(el) {
   const d = DOCS[el.dataset.tip];
   if (!d) return;
   const tip = $("#tip");
-  tip.innerHTML = `${el.dataset.tipx ? `<span class="tip-x">${esc(el.dataset.tipx)}</span>` : ""}<b>${esc(d.t)}</b><q>${esc(d.q)}</q>${d.note ? `<span class="tip-note">${esc(d.note)}</span>` : ""}<cite>TheStrat docs · thestrat.ai/docs/${esc(d.src)}</cite>`;
+  tip.innerHTML = `${el.dataset.tipx ? `<span class="tip-x">${esc(el.dataset.tipx)}</span>` : ""}<b>${esc(d.t)}</b><q>${esc(d.q)}</q>${d.note ? `<span class="tip-note">${esc(d.note)}</span>` : ""}<cite>TheStrat docs · <a href="https://thestrat.ai/docs/${esc(d.src)}/" target="_blank" rel="noopener">Read the full definition on thestrat.ai ↗</a></cite>`;
   tip.hidden = false;
   const r = el.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
   let x = Math.min(Math.max(8, r.left + r.width / 2 - tw / 2), innerWidth - tw - 8);
@@ -1141,13 +1164,24 @@ function showTip(el) {
   if (y + th > innerHeight - 8) y = Math.max(8, r.top - th - 8);
   tip.style.left = `${x}px`; tip.style.top = `${y}px`;
 }
-function hideTip() { $("#tip").hidden = true; }
+let tipTimer = 0;
+function hideTip() { clearTimeout(tipTimer); $("#tip").hidden = true; }
+function hideTipSoon() { clearTimeout(tipTimer); tipTimer = setTimeout(hideTip, 250); }
 function wireTips() {
-  document.addEventListener("mouseover", (e) => { const el = e.target.closest("[data-tip]"); el ? showTip(el) : hideTip(); });
+  // The tooltip stays open while the pointer moves onto it, so its docs link can be clicked.
+  document.addEventListener("mouseover", (e) => {
+    if (e.target.closest("#tip")) { clearTimeout(tipTimer); return; }
+    const el = e.target.closest("[data-tip]");
+    if (el) { clearTimeout(tipTimer); showTip(el); } else hideTipSoon();
+  });
   document.addEventListener("focusin", (e) => { const el = e.target.closest("[data-tip]"); el ? showTip(el) : hideTip(); });
   document.addEventListener("scroll", hideTip, { passive: true });
   // Touch: tap a label to read it (labels inside tiles still open the country on tap).
-  document.addEventListener("touchstart", (e) => { const el = e.target.closest("[data-tip]"); el ? showTip(el) : hideTip(); }, { passive: true });
+  document.addEventListener("touchstart", (e) => {
+    if (e.target.closest("#tip")) return;
+    const el = e.target.closest("[data-tip]");
+    el ? showTip(el) : hideTip();
+  }, { passive: true });
 }
 
 /* ---------- Controls, URL state ---------- */
@@ -1273,6 +1307,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, reduceMotion ? 0 : ms));
 function endBoot() { $("#boot").classList.add("done"); store.set("gev-booted", "1"); }
 
 async function main() {
+  await personalUseGate();
   const quick = store.get("gev-booted") === "1";
   $("#boot").addEventListener("click", endBoot);
   if (quick) endBoot();

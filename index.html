@@ -28,6 +28,21 @@
   <script type="module" src="app.js?v=3"></script>
 </head>
 <body data-sensor="normal">
+  <div class="gate" id="gate" hidden role="dialog" aria-modal="true" aria-labelledby="gateTitle">
+    <div class="gate-card">
+      <div class="gate-k">GOD'S EYE VIEW // PRICE TRUTH</div>
+      <h2 id="gateTitle">Personal use only</h2>
+      <p>This is a free, non-commercial education project. It shows TheStrat bar labels (1, 2U, 2D, 3) worked out from public market data. It does not sell, license or hand out market data.</p>
+      <ul>
+        <li>I will use this page for my own personal, non-commercial education.</li>
+        <li>I will not copy, resell or redistribute what it shows.</li>
+        <li>I understand it is not investment advice. BUY / SELL here only names who controls the price bar.</li>
+      </ul>
+      <p class="gate-fine">Market data belongs to its owners. Price action terms are defined in the TheStrat docs at <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">thestrat.ai/docs ↗</a>.</p>
+      <button class="share" id="gateAgree" type="button">I AGREE · PERSONAL USE</button>
+    </div>
+  </div>
+
   <div id="boot" class="boot" aria-hidden="true"><pre id="bootlog"></pre></div>
 
   <div class="banner">
@@ -156,7 +171,7 @@
   </section>
 
   <section class="panel explain">
-    <div class="panel-head"><h2>How to read this</h2><span class="panel-meta">NO EXPERIENCE NEEDED</span></div>
+    <div class="panel-head"><h2>How to read this</h2><span class="panel-meta">NO EXPERIENCE NEEDED · FULL DEFINITIONS: <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">THESTRAT.AI/DOCS ↗</a></span></div>
     <p class="lead">Every market makes one bar per period: a day, a week, a month, a quarter, a year. We ask only one question: <b>did price break last period's high, its low, both, or neither?</b> That is TheStrat. No opinions. No news. Just what price did.</p>
     <div class="cards" id="howCards"></div>
     <div class="regimes">
@@ -169,7 +184,7 @@
   </section>
 
   <footer class="foot">
-    <p>Education, not investment advice. Market data from Yahoo Finance, read every hour on trading days. Bars still trading are live and can change until they close. This site publishes TheStrat bar labels and chart shapes, never prices. Not affiliated with Yahoo. Inspired by Bilawal Sidhu's <a href="https://github.com/bilawalsidhu/gods-eye-view" target="_blank" rel="noopener">God's Eye View</a>.</p>
+    <p>Personal, non-commercial use only. Education, not investment advice. Price action terms: <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">thestrat.ai/docs</a>. Market data from Yahoo Finance, read every hour on trading days. Bars still trading are live and can change until they close. This site publishes TheStrat bar labels and chart shapes, never prices. Not affiliated with Yahoo. Inspired by Bilawal Sidhu's <a href="https://github.com/bilawalsidhu/gods-eye-view" target="_blank" rel="noopener">God's Eye View</a>.</p>
     <p id="footData"></p>
     <p>Keys: D W M Q Y timeframes · S stocks · B bonds · 1 2 3 sensors · G globe / flat · F money flow · + − zoom (or scroll / pinch) · R replay · Esc close.</p>
   </footer>
