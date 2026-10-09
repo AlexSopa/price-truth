@@ -1,6 +1,7 @@
-import { COUNTRIES, MARKETS } from "./universe.js?v=3";
-import { TIMEFRAMES, control, continuity, analyze, reversal, isTurn, decodeState, periodKey } from "./strat.js?v=3";
-import { chartUrl, parseChart, isLive } from "./yahoo.js?v=3";
+import { COUNTRIES, BYOK_MARKETS } from "./universe.js?v=4";
+import { TIMEFRAMES, control, continuity, reversal, isTurn, decodeState, periodKey } from "./strat.js?v=4";
+import { buildSignals } from "./signals.js?v=4";
+import { PROVIDERS, loadMarkets, clearCache } from "./byok.js?v=4";
 
 const TF_NAME = { D: "Today", W: "This week", M: "This month", Q: "This quarter", Y: "This year" };
 const TF_WORD = { D: "day", W: "week", M: "month", Q: "quarter", Y: "year" };
@@ -9,7 +10,6 @@ const TF_BTN = { D: "DAY", W: "WEEK", M: "MONTH", Q: "QTR", Y: "YEAR" };
 const TF_PREV = { D: "yesterday's", W: "last week's", M: "last month's", Q: "last quarter's", Y: "last year's" };
 const S_LABEL = { "1": "1", "2u": "2U", "2d": "2D", "3": "3" };
 const WORLD_URL = "vendor/countries-110m.json";
-const RELAYS = []; // Add your own CORS relay URL prefixes here to allow ?relay= live mode on the public site.
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // Tooltip text quoted word for word from the TheStrat docs (thestrat.ai/docs). Shown on hover, not linked.
@@ -75,38 +75,101 @@ const store = {
 
 /* ---------- Data ---------- */
 
-function relayAllowed(r) {
-  return /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(r) || RELAYS.some((p) => r.startsWith(p));
+// Run-your-own copies (local build or a fork) have data/signals.json. The public site does not:
+// there, each viewer's own browser loads the data with the viewer's own free key.
+async function tryOwnData() {
+  try {
+    const r = await fetch("data/signals.json", { cache: "no-cache" });
+    if (r.ok) return await r.json();
+  } catch {}
+  return null;
 }
 
-async function loadData() {
-  const relay = new URLSearchParams(location.search).get("relay");
-  if (relay && relayAllowed(relay)) return loadLive(relay);
-  const r = await fetch("data/signals.json", { cache: "no-cache" });
-  if (!r.ok) throw new Error("signals.json missing");
-  return r.json();
+const KEYS_KEY = "gev-keys-v1";
+const readKeys = () => { try { return JSON.parse(local.get(KEYS_KEY) || "{}"); } catch { return {}; } };
+const saveKeys = (k) => local.set(KEYS_KEY, JSON.stringify(k));
+const hasKey = (k) => !!(k.fmp || k.td);
+const agreed = () => { const t = Number(local.get(GATE_KEY)); return t && Date.now() - t < GATE_DAYS * 864e5; };
+
+// Landing: get a free key, paste it, agree to personal use, launch. Resolves with the keys.
+function keyGate(message = "") {
+  const gate = $("#keygate"), keys = readKeys();
+  $("#keyFmp").value = keys.fmp ?? "";
+  $("#keyTd").value = keys.td ?? "";
+  $("#kgAgree").checked = !!agreed();
+  $("#kgMsg").textContent = message;
+  $("#kgMsg").hidden = !message;
+  const check = () => { $("#kgGo").disabled = !(($("#keyFmp").value.trim() || $("#keyTd").value.trim()) && $("#kgAgree").checked); };
+  ["#keyFmp", "#keyTd", "#kgAgree"].forEach((id) => { $(id).oninput = check; $(id).onchange = check; });
+  check();
+  gate.hidden = false;
+  return new Promise((resolve) => {
+    $("#kgForm").onsubmit = (e) => {
+      e.preventDefault();
+      if ($("#kgGo").disabled) return;
+      const k = { fmp: $("#keyFmp").value.trim(), td: $("#keyTd").value.trim() };
+      saveKeys(k);
+      local.set(GATE_KEY, String(Date.now()));
+      gate.hidden = true;
+      resolve(k);
+    };
+  });
 }
 
-// Optional: compute everything in this browser from Yahoo, through a CORS relay you control.
-async function loadLive(relay) {
-  const markets = [];
-  let i = 0, done = 0;
-  const worker = async () => {
-    while (i < MARKETS.length) {
-      const m = MARKETS[i++];
-      try {
-        const json = await (await fetch(relay + encodeURIComponent(chartUrl(m.symbol)))).json();
-        const bars = parseChart(json);
-        if (bars.length >= 30) markets.push({ ...m, ...analyze(bars), live: isLive(json) });
-      } catch {}
-      bootLine(`  FEED ${String(++done).padStart(3, "0")}/${MARKETS.length}  ${m.symbol}`, true);
-    }
+let byokRun = 0, waitTicker = 0;
+// Load with the viewer's keys. The map fills in market by market as the data arrives.
+async function startByok(keys, force = false) {
+  const run = ++byokRun;
+  const entries = new Map();
+  const order = new Map(BYOK_MARKETS.map((m, i) => [m.symbol, i]));
+  const providers = Object.keys(PROVIDERS).filter((p) => keys[p]).map((p) => PROVIDERS[p].name).join(" + ");
+  let last = 0, timer = 0;
+  const emit = (now) => {
+    if (run !== byokRun || !entries.size) return;
+    clearTimeout(timer);
+    const since = performance.now() - last;
+    if (!now && since < 1200) { timer = setTimeout(() => emit(true), 1200 - since); return; }
+    last = performance.now();
+    const list = [...entries.values()].sort((a, b) => order.get(a.meta.symbol) - order.get(b.meta.symbol));
+    applyData(buildSignals(list, `your ${providers} key, loaded in your browser`));
   };
-  await Promise.all(Array.from({ length: 6 }, worker));
-  if (!markets.length) throw new Error("relay failed");
-  const order = new Map(MARKETS.map((m, k) => [m.symbol, k]));
-  markets.sort((a, b) => order.get(a.symbol) - order.get(b.symbol));
-  return { generatedAt: new Date().toISOString(), source: "Yahoo Finance (live in your browser)", markets, live: true };
+  $("#loadBar").hidden = false;
+  state.loading = true;
+  const { failed } = await loadMarkets(BYOK_MARKETS, keys, {
+    force,
+    onMarket(meta, bars, live) { entries.set(meta.symbol, { meta, bars, live }); emit(false); },
+    onProgress({ done, total, symbol, provider, waitMs, finished }) {
+      if (run !== byokRun) return;
+      $("#loadBar i").style.width = `${(done / total) * 100}%`;
+      if (finished) return;
+      clearInterval(waitTicker);
+      if (waitMs) {
+        // Free plans allow 8 calls a minute: count down to the next batch.
+        const until = Date.now() + waitMs;
+        const tick = () => { $("#asof").textContent = `ACQUIRING ${done}/${total} · FREE LIMIT · NEXT BATCH IN ${Math.max(0, Math.ceil((until - Date.now()) / 1000))}s`; };
+        tick();
+        waitTicker = setInterval(tick, 1000);
+      } else {
+        $("#asof").textContent = `ACQUIRING ${done}/${total}${symbol ? ` · ${symbol} · ${provider.toUpperCase()}` : ""}`;
+      }
+    },
+    onAuthError(p, msg) {
+      if (run !== byokRun) return;
+      const k = readKeys(); delete k[p]; saveKeys(k);
+      if (!hasKey(k)) keyGate(`Your ${PROVIDERS[p].name} key was refused (${msg}). Check it and paste it again.`).then((nk) => startByok(nk));
+    },
+  });
+  if (run !== byokRun) return;
+  emit(true);
+  clearInterval(waitTicker);
+  state.loading = false;
+  $("#loadBar").hidden = true;
+  if (state.data) {
+    state.data.failed = failed;
+    renderHeader();
+  } else {
+    keyGate("No data came back. Check your key, or try the other provider.").then((nk) => startByok(nk));
+  }
 }
 
 /* ---------- Analysis ---------- */
@@ -1306,59 +1369,75 @@ function bootLine(s, replaceLast = false) {
 const wait = (ms) => new Promise((r) => setTimeout(r, reduceMotion ? 0 : ms));
 function endBoot() { $("#boot").classList.add("done"); store.set("gev-booted", "1"); }
 
+function renderHeader() {
+  const d = state.data;
+  const liveN = d.markets.filter((m) => m.live).length;
+  const ageDays = (Date.now() - new Date(d.generatedAt)) / 864e5;
+  if (!state.loading) $("#asof").textContent = `${ageDays > 4 ? "DATA DELAYED · " : ""}UPDATED ${d.generatedAt.slice(0, 10)} ${d.generatedAt.slice(11, 16)} UTC${liveN ? ` · ${liveN} ${liveN === 1 ? "MARKET" : "MARKETS"} LIVE` : ""}`;
+  const nations = new Set(d.markets.map((m) => m.country).filter((c) => c !== "GLOBAL")).size;
+  $("#tracking").innerHTML = `TRACKING <b>${nations}</b> NATIONS · <b>${d.markets.length}</b> MARKETS · <b>5</b> TIMEFRAMES`;
+  $("#footData").textContent = `Data: ${d.source}. Generated ${d.generatedAt}. Bars still trading are shown live and can change until they close.${d.failed?.length ? ` Not loaded: ${d.failed.join(", ")}.` : ""}`;
+}
+
+let started = false;
+// First data: wire the page. Later data (more markets arriving, a refresh): re-render.
+function applyData(data) {
+  state.data = data;
+  state.views = {};
+  renderHeader();
+  if (!started) {
+    started = true;
+    wireControls();
+    renderHow();
+    renderPulse();
+    const { patch, country } = readHash();
+    update(patch);
+    addEventListener("hashchange", () => {
+      const h = readHash();
+      update(h.patch);
+      if (h.country && h.country !== state.focus) openCountry(h.country);
+      else if (!h.country) closeDrawer();
+    });
+    if (country && state.views[country]) openCountry(country);
+  } else {
+    renderPulse();
+    update({});
+  }
+}
+
 async function main() {
-  await personalUseGate();
-  const quick = store.get("gev-booted") === "1";
-  $("#boot").addEventListener("click", endBoot);
-  if (quick) endBoot();
-  bootLine("> ESTABLISHING UPLINK ............ OK");
-  const worldP = fetch(WORLD_URL).then((r) => r.json());
-  await wait(quick ? 0 : 350);
-  bootLine(`> ACQUIRING ${MARKETS.length} MARKET FEEDS ..... `);
-  try {
-    if (typeof d3 === "undefined" || typeof topojson === "undefined") throw new Error("libraries missing");
-    state.data = await loadData();
-  } catch (e) {
-    bootLine("> SIGNAL LOST. TRY AGAIN IN A MINUTE.");
+  wireTips();
+  state.mine = detectCountry();
+  if (typeof d3 === "undefined" || typeof topojson === "undefined") {
     $("#headline").textContent = "Signal lost. Try again in a minute.";
-    setTimeout(endBoot, 1500);
     return;
   }
-  const bars = state.data.markets.length * TIMEFRAMES.length;
-  bootLine(`> CLASSIFYING ${bars} PRICE BARS [1 · 2U · 2D · 3] .. OK`);
-  bootLine("> SCANNING FOR REVERSALS .......... OK");
-  await wait(quick ? 0 : 450);
-  bootLine("> GOD'S EYE VIEW ONLINE.");
+  const own = await tryOwnData();
+  if (!own) endBoot(); // public site: the landing floats over the live globe
+  fetch(WORLD_URL).then((r) => r.json()).then((w) => { globe = initGlobe(w, readHash().country || state.mine); }).catch(() => { $("#hudTarget").textContent = "MAP OFFLINE"; });
 
-  const gen = new Date(state.data.generatedAt);
-  const liveN = state.data.markets.filter((m) => m.live).length;
-  const ageDays = (Date.now() - gen) / 864e5;
-  $("#asof").textContent = `${ageDays > 4 ? "DATA DELAYED · " : ""}UPDATED ${state.data.generatedAt.slice(0, 10)} ${state.data.generatedAt.slice(11, 16)} UTC${liveN ? ` · ${liveN} MARKETS LIVE` : ""}`;
-  const nations = new Set(state.data.markets.map((m) => m.country).filter((c) => c !== "GLOBAL")).size;
-  $("#tracking").innerHTML = `TRACKING <b>${nations}</b> NATIONS · <b>${state.data.markets.length}</b> MARKETS · <b>5</b> TIMEFRAMES${state.data.live ? " · LIVE MODE" : ""}`;
-  $("#footData").textContent = `Data: ${state.data.source}. Generated ${state.data.generatedAt}. Bars still trading are shown live and can change until they close.${state.data.failed?.length ? ` Delayed today: ${state.data.failed.join(", ")}.` : ""}`;
-
-  state.mine = detectCountry();
-  wireControls();
-  wireTips();
-  renderHow();
-  renderPulse();
-  const { patch, country } = readHash();
-  update(patch);
-  addEventListener("hashchange", () => {
-    const h = readHash();
-    update(h.patch);
-    if (h.country && h.country !== state.focus) openCountry(h.country);
-    else if (!h.country) closeDrawer();
-  });
-  try {
-    globe = initGlobe(await worldP, country || state.mine);
-  } catch {
-    $("#hudTarget").textContent = "MAP OFFLINE";
+  if (own) {
+    // Run-your-own copy: personal-use agreement, boot sequence, then the copy's own data file.
+    await personalUseGate();
+    const quick = store.get("gev-booted") === "1";
+    $("#boot").addEventListener("click", endBoot);
+    if (quick) endBoot();
+    bootLine("> ESTABLISHING UPLINK ............ OK");
+    bootLine(`> CLASSIFYING ${own.markets.length * TIMEFRAMES.length} PRICE BARS [1 · 2U · 2D · 3] .. OK`);
+    bootLine("> GOD'S EYE VIEW ONLINE.");
+    applyData(own);
+    await wait(quick ? 0 : 700);
+    endBoot();
+    return;
   }
-  if (country && state.views[country]) openCountry(country);
-  await wait(quick ? 0 : 400);
-  endBoot();
+
+  // Public site: bring your own key.
+  $("#keysBtn").hidden = false;
+  $("#keysBtn").addEventListener("click", () => keyGate().then((k) => { clearCache().then(() => startByok(k, true)); }));
+  $("#refreshBtn").hidden = false;
+  $("#refreshBtn").addEventListener("click", () => startByok(readKeys(), true));
+  const keys = readKeys();
+  startByok(hasKey(keys) && agreed() ? keys : await keyGate());
 }
 
 main();

@@ -83,6 +83,26 @@ a { color: var(--accent); }
 .gate ul { margin: 0; padding-left: 18px; color: var(--fg); font-size: 14px; display: flex; flex-direction: column; gap: 4px; }
 .gate .gate-fine { font-size: 12px; color: var(--fg-3); }
 .gate .share { align-self: flex-start; padding: 9px 16px; font-size: 11px; }
+.keygate { background: radial-gradient(ellipse at center, rgba(16, 15, 13, 0.35), rgba(16, 15, 13, 0.82) 70%); overflow-y: auto; }
+.gate-card.wide { max-width: 600px; margin: auto; }
+.keygate h2 { font-size: clamp(26px, 4vw, 38px); line-height: 1.05; }
+.kg-msg { background: var(--down-bg); color: var(--down) !important; border-radius: var(--r); padding: 8px 10px; font-size: 13px; }
+.kg-msg[hidden] { display: none; }
+.steps { margin: 4px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 12px; color: var(--fg-2); font-size: 14px; }
+.steps b { color: var(--fg); }
+.keylinks, .keyfields { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.keylinks a { display: flex; flex-direction: column; gap: 1px; padding: 8px 12px; border: 1px solid var(--accent); border-radius: var(--r); background: var(--accent-bg); color: var(--accent); text-decoration: none; font: 600 12px var(--mono); letter-spacing: 0.06em; }
+.keylinks a small { font: 9.5px var(--mono); color: var(--fg-3); letter-spacing: 0.02em; }
+.keyfields label { flex: 1 1 220px; display: flex; flex-direction: column; gap: 3px; font: 600 9.5px var(--mono); color: var(--fg-3); letter-spacing: 0.08em; text-transform: uppercase; }
+.keyfields input { background: var(--bg); border: 1px solid var(--border-hi); border-radius: var(--r); color: var(--fg); padding: 8px 10px; font: 12px var(--mono); }
+.keyfields input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.check { display: flex; gap: 8px; align-items: flex-start; margin-top: 4px; color: var(--fg); }
+.check input { margin-top: 3px; accent-color: var(--accent); }
+.share.go { padding: 11px 18px; font-size: 12px; }
+.share:disabled { opacity: 0.45; cursor: not-allowed; }
+.loadbar { height: 2px; background: var(--panel-3); }
+.loadbar[hidden] { display: none; }
+.loadbar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.4s var(--ease); }
 [data-tip] { cursor: help; }
 .call em { font-style: normal; }
 .rev-chip.k-cont { opacity: 0.8; border: 1px dashed currentColor; }

@@ -109,3 +109,35 @@ assert.deepEqual(decodeState(tl.W[4]), { s: "2u", g: 1 }); // Friday: week H15 L
 assert.equal(periodKey("2026-10-09", "M"), "2026-10");
 
 console.log("strat engine: all tests pass");
+
+// ---- Bring your own key ----
+const { PROVIDERS, mergeBars, isLiveBar } = await import("../byok.js");
+const { buildSignals } = await import("../signals.js");
+const td = PROVIDERS.td.parse({ status: "ok", values: [
+  { datetime: "2026-10-08", open: "10", high: "11", low: "9", close: "10.5" },
+  { datetime: "2026-10-09", open: "10.5", high: "12", low: "10", close: "11" },
+] });
+assert.deepEqual(td.bars.map((x) => x.d), ["2026-10-08", "2026-10-09"]);
+assert.equal(td.bars[1].h, 12);
+assert.equal(PROVIDERS.td.parse({ code: 401, message: "**apikey** parameter is incorrect", status: "error" }).auth, true);
+assert.equal(PROVIDERS.td.parse({ code: 429, message: "You have run out of API credits", status: "error" }).limit, true);
+const fmp = PROVIDERS.fmp.parse([
+  { symbol: "EWJ", date: "2026-10-09", open: 70, high: 71, low: 69, close: 70.5 },
+  { symbol: "EWJ", date: "2026-10-08", open: 69, high: 70, low: 68, close: 69.5 },
+]);
+assert.deepEqual(fmp.bars.map((x) => x.d), ["2026-10-08", "2026-10-09"]); // newest-first input, oldest-first output
+assert.equal(PROVIDERS.fmp.parse({ historical: [{ date: "2026-10-09", open: 1, high: 2, low: 0.5, close: 1.5 }] }).bars.length, 1); // legacy shape
+assert.equal(PROVIDERS.fmp.parse({ "Error Message": "Invalid API KEY." }).auth, true);
+assert.equal(PROVIDERS.fmp.parse({ "Error Message": "Limit Reach . Please upgrade your plan" }).limit, true);
+assert.match(PROVIDERS.td.url({ td: "BTC/USD" }, "k", "2021-10-09"), /symbol=BTC%2FUSD/);
+assert.deepEqual(mergeBars([b("2026-10-08", 1, 2, 1, 2), b("2026-10-09", 1, 2, 1, 2)], [b("2026-10-09", 1, 3, 1, 3), b("2026-10-10", 1, 2, 1, 2)]).map((x) => x.h), [2, 3, 2]);
+const at = (iso) => new Date(iso);
+assert.equal(isLiveBar({ kind: "index" }, [b("2026-10-09", 1, 2, 1, 2)], at("2026-10-09T15:00:00Z")), true); // 11:00 New York, Friday
+assert.equal(isLiveBar({ kind: "index" }, [b("2026-10-09", 1, 2, 1, 2)], at("2026-10-09T21:00:00Z")), false); // after the close
+assert.equal(isLiveBar({ kind: "index" }, [b("2026-10-08", 1, 2, 1, 2)], at("2026-10-09T15:00:00Z")), false); // last bar is yesterday's
+const sig = buildSignals([{ meta: { symbol: "X", name: "X", country: "US", kind: "index" }, bars: daily, live: true }], "test");
+assert.equal(sig.markets[0].live, true);
+assert.equal(sig.axis.length, daily.length);
+assert.equal(sig.markets[0].tl.D.length, daily.length);
+
+console.log("byok + signals: all tests pass");

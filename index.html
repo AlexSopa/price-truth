@@ -25,7 +25,7 @@
   <link rel="stylesheet" href="style.css" />
   <script src="vendor/d3.min.js" defer></script>
   <script src="vendor/topojson-client.min.js" defer></script>
-  <script type="module" src="app.js?v=3"></script>
+  <script type="module" src="app.js?v=4"></script>
 </head>
 <body data-sensor="normal">
   <div class="gate" id="gate" hidden role="dialog" aria-modal="true" aria-labelledby="gateTitle">
@@ -43,11 +43,39 @@
     </div>
   </div>
 
+  <div class="gate keygate" id="keygate" hidden role="dialog" aria-modal="true" aria-labelledby="kgTitle">
+    <form class="gate-card wide" id="kgForm" autocomplete="off">
+      <div class="gate-k">GOD'S EYE VIEW // PRICE TRUTH // FREE · OPEN SOURCE</div>
+      <h2 id="kgTitle">A spy satellite for the world's money.</h2>
+      <p>Every major stock market, bond market and sector on Earth, plus gold, oil and bitcoin, read with TheStrat. See where buyers and sellers really are on the day, week, month, quarter and year.</p>
+      <p class="kg-msg" id="kgMsg" role="alert" hidden></p>
+      <ol class="steps">
+        <li><b>Get a free data key.</b> 1 minute, email only, no card.
+          <span class="keylinks">
+            <a href="https://site.financialmodelingprep.com/register" target="_blank" rel="noopener">FMP ↗<small>fastest · loads in about 1 min</small></a>
+            <a href="https://twelvedata.com/register" target="_blank" rel="noopener">Twelve Data ↗<small>about 10 min the first time</small></a>
+          </span>
+        </li>
+        <li><b>Paste it here.</b> One key is enough. Both keys load fastest and fill each other's gaps.
+          <span class="keyfields">
+            <label>FMP key<input id="keyFmp" spellcheck="false" placeholder="paste your FMP key"></label>
+            <label>Twelve Data key<input id="keyTd" spellcheck="false" placeholder="paste your Twelve Data key"></label>
+          </span>
+        </li>
+        <li><b>Agree.</b>
+          <label class="check"><input type="checkbox" id="kgAgree"> Personal, non-commercial use only. Not investment advice. I will not resell or redistribute what this page shows.</label>
+        </li>
+      </ol>
+      <button class="share go" id="kgGo" type="submit" disabled>LAUNCH GOD'S EYE VIEW ▶</button>
+      <p class="gate-fine">Your browser fetches the data straight from your provider with your key. Nothing passes through this site. Your key and the data stay on this device. <a href="https://github.com/AlexSopa/price-truth" target="_blank" rel="noopener">Open source ↗</a> · Price action terms: <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">thestrat.ai/docs ↗</a></p>
+    </form>
+  </div>
+
   <div id="boot" class="boot" aria-hidden="true"><pre id="bootlog"></pre></div>
 
   <div class="banner">
     <span>GOD'S EYE VIEW</span><span class="sep">//</span><span>PRICE TRUTH</span><span class="sep">//</span>
-    <span>SOURCE: PUBLIC MARKET DATA</span><span class="sep">//</span><span id="asof">ACQUIRING…</span><span class="sep">//</span>
+    <span>SOURCE: YOUR OWN DATA KEY</span><span class="sep">//</span><span id="asof">ACQUIRING…</span><span class="sep">//</span>
     <a href="https://github.com/AlexSopa/price-truth" target="_blank" rel="noopener">FREE · OPEN SOURCE ↗</a>
   </div>
 
@@ -59,6 +87,8 @@
     </div>
     <div class="meta" id="tracking"></div>
     <div class="actions">
+      <button class="share ghost" id="refreshBtn" type="button" hidden title="Load fresh data with your key">REFRESH ⟳</button>
+      <button class="share ghost" id="keysBtn" type="button" hidden title="Change your data key">DATA KEY</button>
       <div class="clip-wrap">
         <button class="share ghost" id="clip" type="button" aria-haspopup="true">SAVE CLIP ⤓</button>
         <div class="clip-menu" id="clipMenu" hidden>
@@ -73,6 +103,7 @@
     </div>
   </header>
 
+  <div class="loadbar" id="loadBar" hidden><i></i></div>
   <nav class="toolbar" aria-label="View controls">
     <div class="seg" id="tfSeg" role="group" aria-label="Timeframe"></div>
     <div class="seg" id="assetSeg" role="group" aria-label="Asset">
@@ -184,7 +215,7 @@
   </section>
 
   <footer class="foot">
-    <p>Personal, non-commercial use only. Education, not investment advice. Price action terms: <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">thestrat.ai/docs</a>. Market data from Yahoo Finance, read every hour on trading days. Bars still trading are live and can change until they close. This site publishes TheStrat bar labels and chart shapes, never prices. Not affiliated with Yahoo. Inspired by Bilawal Sidhu's <a href="https://github.com/bilawalsidhu/gods-eye-view" target="_blank" rel="noopener">God's Eye View</a>.</p>
+    <p>Personal, non-commercial use only. Education, not investment advice. Price action terms: <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">thestrat.ai/docs</a>. On the public site, your own browser loads the data with your own free key; nothing passes through this site. Run-your-own copies use Yahoo Finance for the owner's personal use. Bars still trading are live and can change until they close. Not affiliated with Yahoo. Inspired by Bilawal Sidhu's <a href="https://github.com/bilawalsidhu/gods-eye-view" target="_blank" rel="noopener">God's Eye View</a>.</p>
     <p id="footData"></p>
     <p>Keys: D W M Q Y timeframes · S stocks · B bonds · 1 2 3 sensors · G globe / flat · F money flow · + − zoom (or scroll / pinch) · R replay · Esc close.</p>
   </footer>
