@@ -557,7 +557,7 @@ body[data-sensor="nvg"] { --rg-safe: #7fd36d; --rg-wave: #e6ffd9; }
 .spk .spk-row { display: flex; align-items: stretch; }
 .spk .spk-plot { position: relative; flex: 1 1 auto; min-width: 0; }
 .spk .spk-gut { position: relative; flex: 0 0 70px; }
-.spk .spk-svg { display: block; width: 100%; height: 124px; }
+.spk .spk-svg { display: block; width: 100%; height: var(--spk-h, 124px); }
 .spk .spk-gl { fill: none; stroke: color-mix(in srgb, var(--fg-4) 70%, transparent); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .spk .spk-band { fill: color-mix(in srgb, var(--fg) 6%, transparent); stroke: none; }
 .spk .spk-ln { fill: none; stroke: var(--fg-2); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
@@ -574,3 +574,40 @@ body[data-sensor="nvg"] { --rg-safe: #7fd36d; --rg-wave: #e6ffd9; }
 .spk .spk-live { color: var(--fg); }
 .spk .spk-lv { position: absolute; left: 6px; font: 500 10px/12px var(--mono); color: var(--fg-2); white-space: nowrap; }
 .spk .spk-cap { margin-top: 8px; font: 400 11px/16px var(--sans); color: var(--fg-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+
+/* Drag to resize: quiet handles on the map | report divider, the bottom of the map area, the left edge of the
+   country panel and the bottom of each chart. Desktop only: under 901 px the layout stacks. */
+.rz { display: none; position: absolute; z-index: 5; touch-action: none; user-select: none; -webkit-user-select: none; }
+.rz::before, .rz::after { content: ""; position: absolute; transition: background 0.12s var(--ease), opacity 0.12s var(--ease); }
+.rz-col { width: 9px; cursor: col-resize; }
+.rz-row { height: 9px; cursor: row-resize; }
+.rz-col::before { top: 0; bottom: 0; left: 4px; width: 1px; }
+.rz-row::before { left: 0; right: 0; top: 4px; height: 1px; }
+.rz-col::after { top: 50%; left: 3px; width: 3px; height: 28px; margin-top: -14px; border-radius: 2px; background: var(--border-hi); }
+.rz-row::after { left: 50%; top: 3px; width: 28px; height: 3px; margin-left: -14px; border-radius: 2px; background: var(--border-hi); }
+.rz:hover::before, .rz:focus-visible::before, .rz.on::before,
+.rz:hover::after, .rz:focus-visible::after, .rz.on::after { background: var(--accent); }
+.rz:focus-visible { outline: 0; }
+#rzSplit { grid-column: 2; top: 0; bottom: 0; left: -5px; }
+#rzOps { left: 0; right: 0; bottom: -5px; }
+#rzDrawer { position: relative; flex: 0 0 9px; margin-right: -5px; z-index: 1; }
+.spk { position: relative; }
+.spk .rz-chart { left: 0; right: 70px; top: calc(var(--spk-h, 124px) - 7px); }
+.spk .rz-chart::after { opacity: 0; }
+.dr-item:hover .rz-chart::after, .spk .rz-chart.on::after { opacity: 1; }
+.rz-note { display: none; }
+body.rz-drag { user-select: none; -webkit-user-select: none; }
+body.rz-drag * { pointer-events: none !important; }
+body.rz-x { cursor: col-resize; } body.rz-y { cursor: row-resize; }
+@media (min-width: 901px) {
+  .rz { display: block; }
+  .rz-note { display: inline; }
+  .ops { position: relative; grid-template-columns: var(--ops-cols, minmax(0, 1.35fr) minmax(320px, 1fr)); }
+  .ops.sized { height: var(--ops-h); grid-template-rows: minmax(0, 1fr); }
+  .ops.sized .globe-wrap { min-height: 0; }
+  .ops.sized .intel { min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border-hi) transparent; }
+  .ops.sized .intel > * { flex-shrink: 0; }
+  .drawer-card { width: min(var(--drawer-w, 620px), 100%); }
+}
+@media (prefers-reduced-motion: reduce) { .rz::before, .rz::after { transition: none; } }

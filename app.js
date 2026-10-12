@@ -64,6 +64,21 @@ const local = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch {} },
 };
+// Sizes the viewer set by dragging an edge (see "Drag to resize"). Kept on this device.
+const LAYOUT_KEY = "gev-layout-v1";
+const LAYOUT_LIM = { split: [20, 85], opsH: [360, 3000], drawerW: [380, 4000], chartH: [96, 420] };
+const CHART_H = 124;
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const layout = (() => {
+  const out = {};
+  try {
+    const o = JSON.parse(local.get(LAYOUT_KEY)) ?? {};
+    for (const [k, [lo, hi]] of Object.entries(LAYOUT_LIM)) if (Number.isFinite(o[k])) out[k] = clamp(o[k], lo, hi);
+  } catch {}
+  return out;
+})();
+const chartH = () => layout.chartH ?? CHART_H;
+const drawerMarkets = new Map(); // symbol -> market, for the charts now in the country panel
 const GATE_KEY = "gev-personal-use-v1";
 const GATE_DAYS = 30;
 
@@ -786,10 +801,10 @@ function startReplay() {
 
 /* ---------- Mini candlestick chart (shape only): "Precision ledger" ---------- */
 
-// The last 15 bars of one market on one timeframe. Vertical geometry is fixed in px (viewBox 600 x 124, drawn
-// 124 px tall), so the vertical scale is 1:1 at any width; the horizontal scale follows the width
-// (non-scaling strokes, no SVG text: all text is HTML).
-//   y 0-12 signal name · y 16-20 signal bracket · y 24-120 plot (999 at the top, 0 at the bottom)
+// The last 15 bars of one market on one timeframe. Vertical geometry is in px (viewBox 600 x H, drawn H px
+// tall), so the vertical scale is 1:1 at any width; the horizontal scale follows the width (non-scaling
+// strokes, no SVG text: all text is HTML). H is 124 until the viewer drags the bottom edge of a chart.
+//   y 0-12 signal name · y 16-20 signal bracket · y 24 to H-4 plot (999 at the top, 0 at the bottom)
 // The prior bar's high and low (the two levels the current bar must break) start at the prior bar and run
 // to the plot edge; their labels sit in a right gutter.
 function sparkSvg(m, tf) {
@@ -798,7 +813,7 @@ function sparkSvg(m, tf) {
   const n = Math.floor(sp.c.length / 4);
   if (n < 1) return "";
 
-  const VW = 600, PT = 24, PH = 96, SH = 124;
+  const VW = 600, PT = 24, SH = chartH(), PH = SH - 28;
   const cw = VW / n, bw = cw * 0.56;
   const f = (v) => v.toFixed(2);
   const cl = (v) => Math.min(999, Math.max(0, Number(v) || 0));
@@ -867,16 +882,17 @@ function sparkSvg(m, tf) {
     live ? "Current bar still trading." : "",
   ].filter(Boolean).join(" ");
 
-  return `<div class="spk">
+  return `<div class="spk" data-sym="${esc(m.symbol)}">
     <div class="spk-row">
       <div class="spk-plot" role="img" aria-label="${esc(aria)}">
-        <svg class="spk-svg" viewBox="0 0 ${VW} ${SH}" preserveAspectRatio="none" aria-hidden="true">${svg}</svg>
+        <svg class="spk-svg" viewBox="0 0 ${VW} ${SH}" style="height:${SH}px" preserveAspectRatio="none" aria-hidden="true">${svg}</svg>
         ${nameHtml}
         <div class="spk-lbls" style="grid-template-columns:repeat(${n},minmax(0,1fr))">${lbls}</div>
         <div class="spk-nows" style="grid-template-columns:repeat(${n},minmax(0,1fr))">${nowCells}</div>
       </div>
       <div class="spk-gut">${gut}</div>
     </div>
+    <div class="rz rz-row rz-chart" title="Drag to resize the charts. Double-click to reset." aria-hidden="true"></div>
     <div class="spk-cap">Last ${n} ${unit}. Dashed lines: last ${word}'s high and low.</div>
   </div>`;
 }
@@ -891,7 +907,9 @@ function openCountry(code, refocus = true) {
   if (refocus) globe?.focus(code);
   const say = Object.entries(v.groups).map(([a, g]) =>
     g.verdict === "BUY" || g.verdict === "SELL" ? `${callText(v, a, g.verdict)}${a === "bonds" ? ` (${rateWords(g.verdict)})` : ""}` : `${v.name} ${a}: ${VERDICT_WORDS[g.verdict].toLowerCase()}`).join(" · ");
+  drawerMarkets.clear();
   const item = (m) => {
+    drawerMarkets.set(m.symbol, m);
     const rev = reversal(m.tf[tf]);
     const others = TIMEFRAMES.filter((t) => t !== tf).map((t) => [t, reversal(m.tf[t])]).filter(([, r]) => r);
     return `<div class="dr-item"><div class="top"><b>${esc(m.name)}</b><span>${esc(m.symbol)} · ${m.live ? '<em class="live">● LIVE BAR</em>' : `LAST BAR ${esc(m.asOf)}`}${m.stale ? " · DATA DELAYED" : ""}</span></div>
@@ -972,7 +990,7 @@ function initGlobe(world, start) {
     applyScale();
     $("#zoomLvl").textContent = `${zoom.toFixed(1)}×`;
   };
-  let visible = true, held = false, lastDraw = 0, lastHud = 0, lastT = performance.now();
+  let visible = true, held = false, drawn = false, lastDraw = 0, lastHud = 0, lastT = performance.now();
 
   function resize() {
     const r = canvas.getBoundingClientRect();
@@ -984,6 +1002,7 @@ function initGlobe(world, start) {
     flatProj.fitExtent([[12, 24], [w - 12, h - 24]], { type: "Sphere" });
     flatBase = flatProj.scale(); flatT = flatProj.translate();
     applyScale();
+    if (drawn) draw(performance.now()); // a new size clears the canvas: draw in the same frame, no flash
   }
   new ResizeObserver(resize).observe(canvas);
   new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(canvas);
@@ -1167,6 +1186,7 @@ function initGlobe(world, start) {
     draw(t);
   }
   draw(performance.now());
+  drawn = true;
   requestAnimationFrame(frame);
 
   // Mouse: d3.drag rotates freely. Touch is handled below so a vertical swipe still scrolls the page.
@@ -1631,6 +1651,138 @@ function wireControls() {
   });
 }
 
+/* ---------- Drag to resize ---------- */
+
+// Four edges can be dragged: the map | report divider, the bottom of the map area, the left edge of the country
+// panel and the bottom of a chart in it (all charts follow). A double-click on an edge resets it. The three page
+// edges also take the arrow keys (Shift = bigger steps, Enter = reset). CSS hides the handles under 901 px,
+// where the layout stacks.
+function applyLayout() {
+  const root = document.documentElement.style;
+  const put = (name, v) => (v == null ? root.removeProperty(name) : root.setProperty(name, v));
+  const { split, opsH, drawerW } = layout;
+  // fr units, not px: the split still follows the window.
+  put("--ops-cols", split == null ? null : `minmax(0, ${split.toFixed(2)}fr) minmax(320px, ${(100 - split).toFixed(2)}fr)`);
+  put("--ops-h", opsH == null ? null : `${opsH}px`);
+  put("--drawer-w", drawerW == null ? null : `${drawerW}px`);
+  put("--spk-h", `${chartH()}px`);
+  $(".ops").classList.toggle("sized", opsH != null);
+}
+
+// Draw the country panel charts again at the current chart height. `keep` is the chart under the pointer: the
+// panel scrolls so that chart stays where it is while the charts above it change height.
+function redrawCharts(keep) {
+  const top = keep?.isConnected ? keep.getBoundingClientRect().top : null;
+  const tpl = document.createElement("template");
+  for (const el of document.querySelectorAll("#drawerBody .spk[data-sym]")) {
+    const m = drawerMarkets.get(el.dataset.sym);
+    if (!m) continue;
+    tpl.innerHTML = sparkSvg(m, state.tf);
+    const row = tpl.content.querySelector(".spk-row");
+    if (row) el.querySelector(".spk-row").replaceWith(row);
+  }
+  if (top != null) $(".drawer-card").scrollTop += keep.getBoundingClientRect().top - top;
+}
+
+function wireResize() {
+  applyLayout();
+  const ops = $(".ops"), card = $(".drawer-card");
+  // sign: +1 when a move right / down makes the part bigger. get, lim and set work in px.
+  const edges = {
+    split: { el: $("#rzSplit"), axis: "x", sign: 1,
+      get: () => $(".globe-wrap").getBoundingClientRect().width,
+      lim: () => [360, ops.clientWidth - 320],
+      set: (px) => { layout.split = clamp(Math.round((px / ops.clientWidth) * 1e4) / 100, ...LAYOUT_LIM.split); } },
+    opsH: { el: $("#rzOps"), axis: "y", sign: 1,
+      get: () => ops.getBoundingClientRect().height,
+      lim: () => [360, Math.max(600, Math.round(innerHeight * 1.5))],
+      set: (px) => { layout.opsH = px; } },
+    drawerW: { el: $("#rzDrawer"), axis: "x", sign: -1,
+      get: () => card.getBoundingClientRect().width,
+      lim: () => [380, innerWidth - 48],
+      set: (px) => { layout.drawerW = px; } },
+    chartH: { axis: "y", sign: 1, get: chartH, lim: () => LAYOUT_LIM.chartH, set: (px) => { layout.chartH = px; } },
+  };
+  const save = () => local.set(LAYOUT_KEY, JSON.stringify(layout));
+  const tell = () => {
+    for (const e of Object.values(edges)) {
+      if (!e.el) continue;
+      const [lo, hi] = e.lim();
+      e.el.setAttribute("aria-valuemin", Math.round(lo));
+      e.el.setAttribute("aria-valuemax", Math.round(Math.max(lo, hi)));
+      e.el.setAttribute("aria-valuenow", Math.round(e.get()));
+    }
+  };
+  const commit = (key, px, keep) => {
+    const e = edges[key], [lo, hi] = e.lim();
+    e.set(clamp(Math.round(px), lo, Math.max(lo, hi)));
+    applyLayout();
+    if (key === "chartH") redrawCharts(keep);
+    tell();
+  };
+  const reset = (key, keep) => {
+    delete layout[key];
+    applyLayout();
+    if (key === "chartH") redrawCharts(keep);
+    tell();
+    save();
+  };
+
+  // One drag at a time. The page only goes into "drag" mode after 3 px, so a plain double-click stays a double-click.
+  let drag = null;
+  const start = (key, ev, handle, keep) => {
+    if (ev.button > 0) return;
+    end(); // a drag whose release was missed
+    const e = edges[key];
+    drag = { key, handle, keep, id: ev.pointerId, at: e.axis === "x" ? ev.clientX : ev.clientY, from: e.get(), moved: false };
+  };
+  const move = (ev) => {
+    if (!drag || ev.pointerId !== drag.id) return;
+    if (ev.pointerType === "mouse" && ev.buttons === 0) { end(); return; } // released outside the window
+    const e = edges[drag.key];
+    const d = ((e.axis === "x" ? ev.clientX : ev.clientY) - drag.at) * e.sign;
+    if (!drag.moved) {
+      if (Math.abs(d) < 3) return;
+      drag.moved = true;
+      drag.handle.classList.add("on");
+      document.body.classList.add("rz-drag", `rz-${e.axis}`);
+    }
+    commit(drag.key, drag.from + d, drag.keep);
+  };
+  const end = (ev) => {
+    if (!drag || (ev?.pointerId != null && ev.pointerId !== drag.id)) return;
+    if (drag.moved) {
+      drag.handle.classList.remove("on");
+      document.body.classList.remove("rz-drag", "rz-x", "rz-y");
+      save();
+    }
+    drag = null;
+  };
+  addEventListener("pointermove", move);
+  addEventListener("pointerup", end);
+  addEventListener("pointercancel", end);
+  addEventListener("blur", end);
+
+  for (const [key, e] of Object.entries(edges)) {
+    if (!e.el) continue;
+    e.el.addEventListener("pointerdown", (ev) => start(key, ev, e.el));
+    e.el.addEventListener("dblclick", () => reset(key));
+    e.el.addEventListener("focus", tell);
+    e.el.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); reset(key); return; }
+      const step = (e.axis === "x" ? { ArrowLeft: -1, ArrowRight: 1 } : { ArrowUp: -1, ArrowDown: 1 })[ev.key];
+      if (!step) return;
+      ev.preventDefault();
+      commit(key, e.get() + step * e.sign * (ev.shiftKey ? 64 : 16));
+      save();
+    });
+  }
+  // The chart handles are drawn with each chart, so they are wired once on the panel.
+  const chartHandle = (ev) => ev.target.closest?.(".rz-chart");
+  $("#drawerBody").addEventListener("pointerdown", (ev) => { const h = chartHandle(ev); if (h) start("chartH", ev, h, h.closest(".spk")); });
+  $("#drawerBody").addEventListener("dblclick", (ev) => { const h = chartHandle(ev); if (h) reset("chartH", h.closest(".spk")); });
+}
+
 function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
   const out = {};
@@ -1718,6 +1870,7 @@ function applyData(data) {
 
 async function main() {
   wireTips();
+  wireResize();
   state.mine = detectCountry();
   if (typeof d3 === "undefined" || typeof topojson === "undefined") {
     $("#headline").textContent = "Signal lost. Try again in a minute.";
