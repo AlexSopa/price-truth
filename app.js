@@ -784,29 +784,101 @@ function startReplay() {
   }, every);
 }
 
-/* ---------- Mini candlestick chart (shape only) ---------- */
+/* ---------- Mini candlestick chart (shape only): "Precision ledger" ---------- */
 
+// The last 15 bars of one market on one timeframe. Vertical geometry is fixed in px (viewBox 600 x 124, drawn
+// 124 px tall), so the vertical scale is 1:1 at any width; the horizontal scale follows the width
+// (non-scaling strokes, no SVG text: all text is HTML).
+//   y 0-12 signal name · y 16-20 signal bracket · y 24-120 plot (999 at the top, 0 at the bottom)
+// The prior bar's high and low (the two levels the current bar must break) start at the prior bar and run
+// to the plot edge; their labels sit in a right gutter.
 function sparkSvg(m, tf) {
   const sp = m.spark?.[tf];
   if (!sp?.c?.length) return "";
-  const n = sp.c.length / 4, W = 300, H = 80, top = 6, bot = 6, plot = H - top - bot;
-  const y = (v) => top + plot - (v / 999) * plot;
-  const step = W / n, bw = Math.max(3, step * 0.56);
-  let out = "";
-  if (n >= 2) {
-    const ph = sp.c[(n - 2) * 4 + 1], pl = sp.c[(n - 2) * 4 + 2];
-    out += `<line x1="0" x2="${W}" y1="${y(ph)}" y2="${y(ph)}" class="trig"/><line x1="0" x2="${W}" y1="${y(pl)}" y2="${y(pl)}" class="trig"/>`;
-  }
+  const n = Math.floor(sp.c.length / 4);
+  if (n < 1) return "";
+
+  const VW = 600, PT = 24, PH = 96, SH = 124;
+  const cw = VW / n, bw = cw * 0.56;
+  const f = (v) => v.toFixed(2);
+  const cl = (v) => Math.min(999, Math.max(0, Number(v) || 0));
+  const yOf = (v) => PT + (1 - cl(v) / 999) * PH;
+  const xOf = (i) => (i + 0.5) * cw;
+  const word = TF_WORD[tf] ?? "bar";
+  const live = Boolean(m.live);
+
+  const bars = [];
   for (let i = 0; i < n; i++) {
-    const [o, h, l, c] = sp.c.slice(i * 4, i * 4 + 4);
-    const x = i * step + step / 2, cls = c > o ? "up" : c < o ? "down" : "flat";
-    out += `<line x1="${x}" x2="${x}" y1="${y(h)}" y2="${y(l)}" class="wick ${cls}"/>`;
-    out += `<rect x="${x - bw / 2}" y="${y(Math.max(o, c))}" width="${bw}" height="${Math.max(1.2, Math.abs(y(o) - y(c)))}" class="body ${cls}${i === n - 1 ? " cur" : ""}"/>`;
+    const [o, hi, lo, c] = sp.c.slice(i * 4, i * 4 + 4).map((v) => cl(v));
+    bars.push({ o, c, hi: Math.max(hi, o, c), lo: Math.min(lo, o, c), s: String(sp.s?.[i] ?? "").toLowerCase() });
   }
-  const labels = sp.s.map((s) => `<i class="s-${esc(s)}"${tipAttr(s)}>${S_LABEL[s] ?? ""}</i>`).join("");
-  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Last ${n} ${TF_WORD[tf]} bars of ${esc(m.name)}">${out}</svg>
-    <div class="spark-lbls" style="grid-template-columns:repeat(${n},1fr)">${labels}</div>
-    <div class="spark-cap"><span>LAST ${n} ${TF_HUD[tf]} BARS · SHAPE ONLY</span><span>${m.live ? "● CURRENT BAR LIVE" : "DOTTED = LAST BAR'S HIGH / LOW"}</span></div>`;
+  const pri = n >= 2 ? bars[n - 2] : null;
+  const cur = bars[n - 1];
+  const sig = reversal(m.tf[tf]);
+  const dirTone = (d) => (d > 0 ? "spk-u" : d < 0 ? "spk-d" : "spk-f");
+
+  // Layers, back to front: faint guides, current-bar band, prior levels, candles, signal bracket.
+  let svg = [0.25, 0.5, 0.75].map((t) => `<line class="spk-gl" x1="0" x2="${VW}" y1="${f(PT + PH * t)}" y2="${f(PT + PH * t)}"/>`).join("");
+  svg += `<rect class="spk-band" x="${f(xOf(n - 1) - cw * 0.4)}" y="${PT}" width="${f(cw * 0.8)}" height="${PH}"/>`;
+  if (pri) {
+    for (const v of [pri.hi, pri.lo]) svg += `<line class="spk-ln" x1="${f(xOf(n - 2))}" x2="${VW}" y1="${f(yOf(v))}" y2="${f(yOf(v))}"/>`;
+  }
+  bars.forEach((b, i) => {
+    const k = b.c > b.o ? "spk-u" : b.c < b.o ? "spk-d" : "spk-f";
+    const x = xOf(i), yo = yOf(b.o), yc = yOf(b.c);
+    svg += `<line class="spk-wk ${k}" x1="${f(x)}" x2="${f(x)}" y1="${f(yOf(b.hi))}" y2="${f(yOf(b.lo))}"/>`;
+    svg += `<rect class="spk-bd ${k}" x="${f(x - bw / 2)}" y="${f(Math.min(yo, yc))}" width="${f(bw)}" height="${f(Math.max(1.5, Math.abs(yo - yc)))}"/>`;
+  });
+
+  // The signal in force: a bracket over its bars, its name above (a link to its TheStrat.ai page).
+  let nameHtml = "";
+  if (sig) {
+    const k = Math.min(n, Math.max(1, (String(sig.name).match(/\d+/g) || []).length));
+    const xl = xOf(n - k) - bw / 2, xr = xOf(n - 1) + bw / 2, tone = dirTone(sig.dir);
+    svg += `<path class="spk-br ${tone}" d="M${f(xl)} 20V16H${f(xr)}V20"/>`;
+    nameHtml = `<span class="spk-sig ${tone}"${docAttr(sig.doc)} style="right:${f(((VW - xr) / VW) * 100)}%">${esc(sig.name)}</span>`;
+  }
+
+  // End labels for the prior high and low. If the two levels are closer than one line, push them apart.
+  let gut = "";
+  if (pri) {
+    let a = yOf(pri.hi) - 6, b = yOf(pri.lo) - 6;
+    if (b - a < 12) { const mid = (a + b) / 2; a = mid - 6; b = mid + 6; }
+    gut = `<span class="spk-lv" style="top:${f(a)}px">prior high</span><span class="spk-lv" style="top:${f(b)}px">prior low</span>`;
+  }
+
+  // Scenario labels, one per bar, centred under each candle by the same column grid.
+  const lbls = bars.map((b) => {
+    const k = b.s === "2u" ? "spk-u" : b.s === "2d" ? "spk-d" : b.s === "3" ? "spk-gold" : "spk-f";
+    return `<span class="${k}"${b.s ? tipAttr(b.s) : ""}>${esc(S_LABEL[b.s] ?? "")}</span>`;
+  }).join("");
+
+  // "now" tick under the current bar. It reads "live" while the bar is still trading.
+  const nowCells = bars.map((_, i) => (i === n - 1
+    ? `<div><span class="spk-tk"></span><span class="spk-nw${live ? " spk-live" : ""}">${live ? "live" : "now"}</span></div>`
+    : "<div></div>")).join("");
+
+  const unit = n === 1 ? word : `${word}s`;
+  const aria = [
+    `Last ${n} ${unit} of ${m.name}.`,
+    S_LABEL[cur.s] ? `Current bar ${S_LABEL[cur.s]}${pri ? " against the prior bar" : ""}.` : "",
+    pri ? "Dashed lines: prior bar high and low." : "",
+    sig ? `Signal ${sig.name}${sig.dir > 0 ? ", up" : ", down"}.` : "",
+    live ? "Current bar still trading." : "",
+  ].filter(Boolean).join(" ");
+
+  return `<div class="spk">
+    <div class="spk-row">
+      <div class="spk-plot" role="img" aria-label="${esc(aria)}">
+        <svg class="spk-svg" viewBox="0 0 ${VW} ${SH}" preserveAspectRatio="none" aria-hidden="true">${svg}</svg>
+        ${nameHtml}
+        <div class="spk-lbls" style="grid-template-columns:repeat(${n},minmax(0,1fr))">${lbls}</div>
+        <div class="spk-nows" style="grid-template-columns:repeat(${n},minmax(0,1fr))">${nowCells}</div>
+      </div>
+      <div class="spk-gut">${gut}</div>
+    </div>
+    <div class="spk-cap">Last ${n} ${unit}. Dashed lines: last ${word}'s high and low.</div>
+  </div>`;
 }
 
 /* ---------- Drawer ---------- */
