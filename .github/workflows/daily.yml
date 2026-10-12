@@ -58,7 +58,7 @@ jobs:
         if: steps.plan.outputs.go == 'true'
         run: |
           mkdir -p _site/data
-          cp index.html app.js style.css strat.js signals.js byok.js vault.js universe.js yahoo.js og.png _site/
+          cp index.html app.js style.css strat.js signals.js byok.js vault.js universe.js about.js yahoo.js og.png _site/
           cp -r vendor _site/
           touch _site/.nojekyll
           if [ -n "$GEV_PASSWORD" ]; then
