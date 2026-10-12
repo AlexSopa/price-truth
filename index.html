@@ -22,10 +22,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=JetBrains+Mono:wght@400..600&family=Space+Grotesk:wght@500..700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=11" />
+  <link rel="stylesheet" href="style.css?v=12" />
   <script src="vendor/d3.min.js" defer></script>
   <script src="vendor/topojson-client.min.js" defer></script>
-  <script type="module" src="app.js?v=9"></script>
+  <script type="module" src="app.js?v=10"></script>
 </head>
 <body data-sensor="normal">
   <div class="gate" id="gate" hidden role="dialog" aria-modal="true" aria-labelledby="gateTitle">
@@ -46,7 +46,7 @@
     <form class="gate-card wide" id="kgForm" autocomplete="off">
       <img class="kg-shot" src="og.png" alt="The God's Eye View globe: countries colored by buying and selling, with money flowing between them" width="1200" height="630">
       <h2 id="kgTitle">See it live in 3 steps.</h2>
-      <p>Every major stock market, bond market and sector on Earth, plus gold, oil and bitcoin, read with TheStrat. See where buyers and sellers really are on the day, week, month, quarter and year.</p>
+      <p>Every major stock market, bond market and sector on Earth, plus gold, oil and bitcoin, read with <a href="https://thestrat.ai/" target="_blank" rel="noopener">TheStrat</a>. See where buyers and sellers really are on the day, week, month, quarter and year.</p>
       <p class="kg-msg" id="kgMsg" role="alert" hidden></p>
       <ol class="steps">
         <li><b>Make a free Twelve Data account</b> (email only, no card). Copy the API key from your dashboard.
@@ -90,6 +90,7 @@
     <span class="b-brand">GOD'S EYE VIEW</span>
     <span id="srcTag">SOURCE: YOUR OWN DATA KEY</span>
     <span id="asof">ACQUIRING…</span>
+    <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">Learn TheStrat at TheStrat.ai <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
     <a href="https://github.com/AlexSopa/price-truth" target="_blank" rel="noopener">Free and open source <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
   </div>
 
@@ -240,7 +241,7 @@
 
   <section class="panel explain">
     <div class="panel-head"><h2>How to read this</h2><span class="panel-meta">No experience needed. Full definitions at <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">thestrat.ai/docs</a>.</span></div>
-    <p class="lead">Every market makes one bar per period: a day, a week, a month, a quarter, a year. We ask only one question: <b>did price break last period's high, its low, both, or neither?</b> That is TheStrat. No opinions. No news. Just what price did.</p>
+    <p class="lead">Every market makes one bar per period: a day, a week, a month, a quarter, a year. We ask only one question: <b>did price break last period's high, its low, both, or neither?</b> That is <a href="https://thestrat.ai/" target="_blank" rel="noopener">TheStrat</a>. No opinions. No news. Just what price did.</p>
     <div class="cards" id="howCards"></div>
     <p class="fine">Bonds are read through government-bond fund prices. A bond's price and its yield move in opposite directions, and a price only falls when sellers accept lower bids: bond prices falling = that country's debt is being sold = its yields rise. Every trade has a buyer and a seller, so "money flow" here means which side is pushing price, not money that physically moves. Some markets use US-listed funds priced in dollars (Chile, Poland, Norway, Thailand, Philippines, Saudi Arabia, China bonds, emerging-market bonds), so their moves include the currency. The world risk gauge sets every country's stock market against safe-haven government bonds only (US, Germany, UK, Japan, Canada, Australia and international treasuries); emerging-market bonds are left out, because in a real flight to safety they are sold with the stocks. A country's own regime uses its own stocks and its own bonds. "All 5 timeframes green" means the day, week, month, quarter and year bars all trade above where they opened. Bars still trading are live and can change until they close.</p>
   </section>
