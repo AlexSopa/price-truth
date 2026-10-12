@@ -195,3 +195,23 @@ export function analyze(daily, histDays = 90) {
   }
   return { asOf: daily[daily.length - 1]?.d ?? null, tf, hist, spark: sp };
 }
+
+// Stock/bond regime from two control scores in [-1, 1]. T = how decisive each side must be.
+//   stocks bought + bonds sold   -> "risk-on"
+//   stocks sold   + bonds bought -> "safety"  (flight to safety)
+//   both sold                    -> "sold"    (capital leaving / everything sold)
+//   both bought                  -> "bought"  (liquidity wave / everything bought)
+// When one side is undecided, the gap between them gives a lean; otherwise "mixed".
+export function regime(stock, bond, T = 0.5) {
+  if (!Number.isFinite(stock) || !Number.isFinite(bond)) return null;
+  const s = stock >= T ? 1 : stock <= -T ? -1 : 0;
+  const b = bond >= T ? 1 : bond <= -T ? -1 : 0;
+  if (s > 0 && b < 0) return "risk-on";
+  if (s < 0 && b > 0) return "safety";
+  if (s < 0 && b < 0) return "sold";
+  if (s > 0 && b > 0) return "bought";
+  const tilt = stock - bond;
+  if (tilt >= T) return "lean-risk-on";
+  if (tilt <= -T) return "lean-safety";
+  return "mixed";
+}

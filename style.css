@@ -492,3 +492,61 @@ html { scrollbar-color: var(--border-hi) var(--bg); }
 @media (max-width: 520px) {
   .replay-bar { flex-wrap: wrap; justify-content: center; width: calc(100% - 24px); row-gap: 6px; }
 }
+
+
+/* =========================================================================
+   Risk regime: risk-on or flight to safety (stocks against government bonds)
+   ========================================================================= */
+:root { --rg-on: var(--up); --rg-safe: #60a5fa; --rg-sold: var(--down); --rg-wave: var(--gold); }
+body[data-sensor="nvg"] { --rg-safe: #7fd36d; --rg-wave: #e6ffd9; }
+.rg-risk-on, .rg-lean-risk-on { color: var(--rg-on); } .rg-safety, .rg-lean-safety { color: var(--rg-safe); }
+.rg-sold { color: var(--rg-sold); } .rg-bought { color: var(--rg-wave); } .rg-mixed { color: var(--fg-3); }
+.rgb-risk-on { background: var(--rg-on); } .rgb-safety { background: var(--rg-safe); } .rgb-sold { background: var(--rg-sold); } .rgb-bought { background: var(--rg-wave); }
+.rgb-lean-risk-on { background: color-mix(in oklab, var(--rg-on) 40%, var(--panel-3)); } .rgb-lean-safety { background: color-mix(in oklab, var(--rg-safe) 40%, var(--panel-3)); }
+.rgb-mixed { background: var(--panel-3); }
+
+/* Gauge in the situation report */
+.risk-tug[hidden] { display: none; }
+.risk-tug #riskSafe { background: var(--rg-safe); } .risk-tug #riskOn { background: var(--rg-on); }
+.risk-tug .tug-head a { font: 600 13px var(--sans); letter-spacing: 0; text-decoration: none; }
+.tug-foot .verdict { margin-left: 4px; }
+.rg-tag { font: 500 var(--t-sm)/1.4 var(--sans); padding: 0 10px 7px; }
+
+/* Panel */
+.risk { display: grid; grid-template-columns: clamp(300px, 26vw, 430px) minmax(260px, 1fr) minmax(300px, 1.1fr); gap: 24px 40px; padding: 8px 16px 8px; align-items: start; }
+.risk-chart svg { display: block; width: 100%; height: auto; }
+.risk-chart .q { opacity: 0.07; } .q-safety { fill: var(--rg-safe); } .q-bought { fill: var(--rg-wave); } .q-sold { fill: var(--rg-sold); } .q-risk-on { fill: var(--rg-on); }
+.risk-chart .ax { stroke: var(--border-hi); stroke-width: 1; }
+.risk-chart .ql { font: 600 11px var(--sans); fill: currentColor; opacity: 0.9; }
+.risk-chart .axl { font: 500 9.5px var(--mono); fill: var(--fg-3); letter-spacing: 0.06em; }
+.rk-dot { cursor: pointer; } .rk-dot circle { fill: currentColor; stroke: var(--bg); stroke-width: 1.5; }
+.rk-dot text { font: 600 10px var(--mono); fill: var(--fg); }
+.rk-dot:hover circle { stroke: var(--fg); }
+.rk-world circle { fill: none; stroke: var(--fg); stroke-width: 2; } .rk-world text { font: 700 9.5px var(--mono); fill: var(--fg); letter-spacing: 0.08em; }
+.rw-k { font: 500 var(--t-sm) var(--sans); color: var(--fg-3); margin-bottom: 4px; }
+.rw-name { font: 700 clamp(26px, 2.6vw, 34px)/1.05 var(--display); letter-spacing: -0.02em; margin-bottom: 12px; }
+.rw-line { margin: 6px 0; font-size: var(--t-md); color: var(--fg); display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.rw-line small { font-size: var(--t-sm); color: var(--fg-3); }
+.rw-words { margin: 12px 0 4px; color: var(--fg-2); max-width: 46ch; }
+.rw-also { margin: 0; font-size: var(--t-sm); color: var(--fg-3); }
+.risk-hist { margin-top: 20px; }
+.rh-strip { display: flex; gap: 1px; height: 22px; border-radius: 3px; overflow: hidden; }
+.rh-strip i { flex: 1 1 0; min-width: 2px; }
+.rh-key { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: var(--t-xs); color: var(--fg-3); }
+.rh-key span { display: inline-flex; align-items: center; gap: 5px; } .rh-key i { width: 9px; height: 9px; border-radius: 2px; }
+.rk-group { margin: 18px 0 2px; font: 600 15px/1.3 var(--display); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.rk-group:first-child { margin-top: 0; }
+.rk-group small { font: 500 11px var(--mono); letter-spacing: 0.04em; color: var(--fg-3); }
+.rk-words { margin: 0 0 6px; font-size: var(--t-sm); color: var(--fg-3); max-width: 52ch; }
+.rk-row { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; background: none; border: 0; border-bottom: 1px solid var(--border); padding: 9px 4px; text-align: left; }
+.rk-row:hover { background: var(--panel); }
+.rk-name { font: 600 14px var(--display); }
+.rk-acts { font-size: var(--t-sm); color: var(--fg-3); white-space: nowrap; display: inline-flex; gap: 5px; align-items: center; }
+.rk-none { margin: 14px 0 0; font-size: var(--t-sm); color: var(--fg-4); }
+.dr-regime { margin: 0 0 14px; font-size: var(--t-sm); color: var(--fg-2); }
+.dr-regime b { font: 700 14px var(--display); margin-right: 4px; }
+.legend .lg { display: inline-flex; align-items: center; gap: 5px; margin-right: 6px; }
+.legend .lg i { width: 9px; height: 9px; border-radius: 2px; }
+.legend .lg-bar { width: 120px; height: 6px; border-radius: 3px; }
+@media (max-width: 1100px) { .risk { grid-template-columns: minmax(240px, 380px) 1fr; } .risk-list { grid-column: 1 / -1; } }
+@media (max-width: 700px) { .risk { grid-template-columns: 1fr; } .risk-chart { max-width: 420px; } }

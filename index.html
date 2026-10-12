@@ -22,10 +22,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=JetBrains+Mono:wght@400..600&family=Space+Grotesk:wght@500..700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=8" />
+  <link rel="stylesheet" href="style.css?v=11" />
   <script src="vendor/d3.min.js" defer></script>
   <script src="vendor/topojson-client.min.js" defer></script>
-  <script type="module" src="app.js?v=5"></script>
+  <script type="module" src="app.js?v=9"></script>
 </head>
 <body data-sensor="normal">
   <div class="gate" id="gate" hidden role="dialog" aria-modal="true" aria-labelledby="gateTitle">
@@ -132,6 +132,9 @@
     <div class="seg" id="flowSeg" role="group" aria-label="Money flow arcs (key F)">
       <button data-v="control" title="Sellers in control → buyers in control">Money flow</button><button data-v="reversal" title="Reversing down → reversing up">Reversals</button><button data-v="off">Off</button>
     </div>
+    <div class="seg" id="paintSeg" role="group" aria-label="Color the map by">
+      <button data-v="control" title="Color each country by who controls price: buyers or sellers">Buy / sell</button><button data-v="regime" title="Color each country by its stocks against its bonds: risk-on or flight to safety">Risk / safety</button>
+    </div>
   </nav>
 
   <main class="ops">
@@ -153,7 +156,7 @@
         <button id="zoomReset" type="button" aria-label="Reset zoom"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button>
       </div>
       <div class="hud bl">
-        <div class="legend"><span>SELLING</span><i id="legendBar"></i><span>BUYING</span></div>
+        <div class="legend" id="legend"></div>
         <div class="hud-dim" id="flowHint"></div>
         <div class="hud-dim" id="dragHint">DRAG TO ROTATE · CLICK A COUNTRY</div>
       </div>
@@ -168,6 +171,11 @@
       <h1 id="headline">Acquiring signal…</h1>
       <p id="subline" class="subline"></p>
       <div class="counts" id="counts"></div>
+      <div class="tug risk-tug" id="riskTug" hidden>
+        <div class="tug-head"><span>FLIGHT TO SAFETY</span><a href="#riskmap" id="riskVerdict"></a><span>RISK-ON</span></div>
+        <div class="tug-bar"><i id="riskSafe"></i><i id="riskOn"></i></div>
+        <div class="tug-foot"><span id="riskBondTxt"></span><span id="riskStockTxt"></span></div>
+      </div>
       <div class="tug">
         <div class="tug-head"><span>WEST</span><span id="tugVerdict"></span><span>EAST</span></div>
         <div class="tug-bar"><i id="tugWest"></i><i id="tugEast"></i></div>
@@ -178,6 +186,21 @@
       <ul class="insights" id="insights"></ul>
     </aside>
   </main>
+
+  <section class="panel" id="riskmap">
+    <div class="panel-head">
+      <h2>Risk-on or flight to safety</h2>
+      <span class="panel-meta" id="riskMeta"></span>
+    </div>
+    <div class="risk">
+      <div class="risk-chart" id="riskChart"></div>
+      <div class="risk-side">
+        <div class="risk-world" id="riskWorld"></div>
+        <div class="risk-hist" id="riskHist"></div>
+      </div>
+      <div class="risk-list" id="riskList"></div>
+    </div>
+  </section>
 
   <section class="panel">
     <div class="panel-head">
@@ -219,13 +242,7 @@
     <div class="panel-head"><h2>How to read this</h2><span class="panel-meta">No experience needed. Full definitions at <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">thestrat.ai/docs</a>.</span></div>
     <p class="lead">Every market makes one bar per period: a day, a week, a month, a quarter, a year. We ask only one question: <b>did price break last period's high, its low, both, or neither?</b> That is TheStrat. No opinions. No news. Just what price did.</p>
     <div class="cards" id="howCards"></div>
-    <div class="regimes">
-      <div><b class="up">Stocks bought · bonds sold</b><span>Risk-on. Money leaves safety for growth. Yields rise.</span></div>
-      <div><b class="down">Stocks sold · bonds bought</b><span>Flight to safety. Yields fall.</span></div>
-      <div><b class="down">Stocks sold · bonds sold</b><span>Capital leaving the country. Yields rise. The strongest SELL.</span></div>
-      <div><b class="up">Stocks bought · bonds bought</b><span>Liquidity wave. Yields fall.</span></div>
-    </div>
-    <p class="fine">Bonds are read through government-bond fund prices. A bond's price and its yield move in opposite directions, and a price only falls when sellers accept lower bids: bond prices falling = that country's debt is being sold = its yields rise. Every trade has a buyer and a seller, so "money flow" here means which side is pushing price, not money that physically moves. Some markets use US-listed funds priced in dollars (Chile, Poland, Norway, Thailand, Philippines, Saudi Arabia, China bonds, emerging-market bonds), so their moves include the currency. "All 5 timeframes green" means the day, week, month, quarter and year bars all trade above where they opened. Bars still trading are live and can change until they close.</p>
+    <p class="fine">Bonds are read through government-bond fund prices. A bond's price and its yield move in opposite directions, and a price only falls when sellers accept lower bids: bond prices falling = that country's debt is being sold = its yields rise. Every trade has a buyer and a seller, so "money flow" here means which side is pushing price, not money that physically moves. Some markets use US-listed funds priced in dollars (Chile, Poland, Norway, Thailand, Philippines, Saudi Arabia, China bonds, emerging-market bonds), so their moves include the currency. The world risk gauge sets every country's stock market against safe-haven government bonds only (US, Germany, UK, Japan, Canada, Australia and international treasuries); emerging-market bonds are left out, because in a real flight to safety they are sold with the stocks. A country's own regime uses its own stocks and its own bonds. "All 5 timeframes green" means the day, week, month, quarter and year bars all trade above where they opened. Bars still trading are live and can change until they close.</p>
   </section>
 
   <footer class="foot">

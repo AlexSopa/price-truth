@@ -1,8 +1,8 @@
-import { COUNTRIES, BYOK_MARKETS } from "./universe.js?v=5";
-import { TIMEFRAMES, control, continuity, reversal, isTurn, decodeState, periodKey } from "./strat.js?v=5";
-import { buildSignals } from "./signals.js?v=5";
-import { PROVIDERS, loadMarkets } from "./byok.js?v=5";
-import { unseal } from "./vault.js?v=5";
+import { COUNTRIES, BYOK_MARKETS, HAVEN_BONDS } from "./universe.js?v=6";
+import { TIMEFRAMES, control, continuity, reversal, isTurn, decodeState, periodKey, regime } from "./strat.js?v=6";
+import { buildSignals } from "./signals.js?v=6";
+import { PROVIDERS, loadMarkets } from "./byok.js?v=6";
+import { unseal } from "./vault.js?v=6";
 
 const TF_NAME = { D: "Today", W: "This week", M: "This month", Q: "This quarter", Y: "This year" };
 const TF_WORD = { D: "day", W: "week", M: "month", Q: "quarter", Y: "year" };
@@ -50,7 +50,7 @@ const SIGNAL_STORY = {
 };
 const story = (r) => SIGNAL_STORY[r.kind][r.dir > 0 ? 0 : 1];
 
-const state = { tf: "D", asset: "stocks", sensor: "normal", flow: "control", view: "globe", replayStep: "bar", replayRange: null, data: null, views: {}, focus: null, hover: null, mine: null, frame: null };
+const state = { tf: "D", asset: "stocks", sensor: "normal", flow: "control", view: "globe", paint: "control", replayStep: "bar", replayRange: null, data: null, views: {}, focus: null, hover: null, mine: null, frame: null };
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -272,9 +272,131 @@ function buildViews(tf) {
       const lead = members.find((m) => m.kind === "index" || m.kind === "bond") ?? members[0];
       v.groups[asset] = { members, lead, score, ftfc: continuity(lead.tf), verdict: verdictOf(score, members, tf) };
     }
+    // Risk regime: this country's own stocks against its own government bonds.
+    v.regime = v.groups.stocks && v.groups.bonds ? regime(v.groups.stocks.score, v.groups.bonds.score, COUNTRY_T) : null;
     views[code] = v;
   }
   return views;
+}
+
+
+/* ---------- Risk regime: risk-on or flight to safety ---------- */
+
+// Read from BUY / SELL on stocks and on government bonds. acts = the buy/sell pair that defines the regime.
+const REGIME = {
+  "risk-on": { name: "Risk-on", world: "Risk-on", tag: "RISK-ON", acts: "BUY stocks, SELL bonds", words: "Money is leaving the safety of bonds for stocks. Yields rise." },
+  safety: { name: "Flight to safety", world: "Flight to safety", tag: "SAFETY", acts: "SELL stocks, BUY bonds", words: "Money is leaving stocks and hiding in government bonds. Yields fall." },
+  sold: { name: "Everything sold", world: "Everything sold", tag: "ALL SOLD", acts: "SELL stocks, SELL bonds", words: "Stocks and bonds are both sold. Capital is leaving, for cash or for other countries. Yields rise." },
+  bought: { name: "Everything bought", world: "Everything bought", tag: "ALL BOUGHT", acts: "BUY stocks, BUY bonds", words: "Stocks and bonds are both bought: a liquidity wave. Yields fall." },
+  "lean-risk-on": { name: "Leaning risk-on", world: "Leaning risk-on", tag: "", acts: "", words: "One side is undecided. The balance favors stocks over bonds." },
+  "lean-safety": { name: "Leaning to safety", world: "Leaning to safety", tag: "", acts: "", words: "One side is undecided. The balance favors bonds over stocks." },
+  mixed: { name: "No clear regime", world: "No clear regime", tag: "", acts: "", words: "Stocks and bonds are both undecided." },
+};
+const REGIME_ORDER = ["safety", "risk-on", "sold", "bought", "lean-safety", "lean-risk-on", "mixed"];
+const WORLD_T = 0.2; // the world gauge: a net 20% of markets on one side
+const COUNTRY_T = 0.5; // a country: the same bar as its BUY / SELL verdict
+const sideOf = (score, T) => (score >= T ? "BUY" : score <= -T ? "SELL" : "UNDECIDED");
+const chip = (s) => `<span class="verdict ${vClass(s)}">${s}</span>`;
+
+function basket(pick, tf) {
+  const sc = state.data.markets.filter((m) => pick(m) && m.tf[tf]).map((m) => control(m.tf[tf]).score);
+  return { n: sc.length, score: mean(sc), buy: sc.filter((s) => s >= 0.5).length, sell: sc.filter((s) => s <= -0.5).length };
+}
+// World: every country's stock market against the safe-haven government bonds.
+function worldRegime(tf = state.tf) {
+  const stocks = basket((m) => m.kind === "index", tf);
+  const bonds = basket((m) => HAVEN_BONDS.has(m.symbol), tf);
+  if (!stocks.n || !bonds.n) return null;
+  return { stocks, bonds, key: regime(stocks.score, bonds.score, WORLD_T), tilt: stocks.score - bonds.score };
+}
+
+// Countries that share a spot on the chart are fanned out around it.
+function riskChartSvg(points, world) {
+  const S = 380, pad = 46, mid = S / 2, span = mid - pad;
+  const X = (v) => mid + v * span * 0.86, Y = (v) => mid - v * span * 0.86; // keep the extremes inside the box
+  // A dot and its label need about 34 x 13 px. A point that lands on an earlier one steps away from the
+  // nearest edge (down in the top half, up in the bottom half) until it is clear.
+  const placed = [];
+  let dots = "";
+  for (const p of points) {
+    const x = X(p.x);
+    let y = Y(p.y);
+    const step = y <= mid ? 13 : -13;
+    for (let tries = 0; tries < 12 && placed.some((q) => Math.abs(q.x - x) < 34 && Math.abs(q.y - y) < 12); tries++) y += step;
+    placed.push({ x, y });
+    const right = x <= mid;
+    dots += `<g class="rk-dot rg-${p.key}" data-country="${p.code}"><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5"/><text x="${(x + (right ? 8 : -8)).toFixed(1)}" y="${(y + 3.5).toFixed(1)}" text-anchor="${right ? "start" : "end"}">${p.code}</text><title>${esc(p.name)}: ${esc(REGIME[p.key].name)}. Stocks ${p.stock}, bonds ${p.bond}.</title></g>`;
+  }
+  const w = world ? `<g class="rk-world"><circle cx="${X(world.stocks.score).toFixed(1)}" cy="${Y(world.bonds.score).toFixed(1)}" r="10"/><text x="${X(world.stocks.score).toFixed(1)}" y="${(Y(world.bonds.score) - 15).toFixed(1)}" text-anchor="middle">WORLD</text><title>The world: ${esc(REGIME[world.key].world)}</title></g>` : "";
+  return `<svg viewBox="0 0 ${S} ${S}" role="img" aria-label="Risk map: stocks bought or sold against bonds bought or sold, per country">
+    <rect class="q q-safety" x="${pad}" y="${pad}" width="${span}" height="${span}"/><rect class="q q-bought" x="${mid}" y="${pad}" width="${span}" height="${span}"/>
+    <rect class="q q-sold" x="${pad}" y="${mid}" width="${span}" height="${span}"/><rect class="q q-risk-on" x="${mid}" y="${mid}" width="${span}" height="${span}"/>
+    <line class="ax" x1="${pad}" x2="${S - pad}" y1="${mid}" y2="${mid}"/><line class="ax" x1="${mid}" x2="${mid}" y1="${pad}" y2="${S - pad}"/>
+    <text class="ql rg-safety" x="${pad}" y="${pad - 10}">Flight to safety</text><text class="ql rg-bought" x="${S - pad}" y="${pad - 10}" text-anchor="end">Everything bought</text>
+    <text class="ql rg-sold" x="${pad}" y="${S - pad + 18}">Everything sold</text><text class="ql rg-risk-on" x="${S - pad}" y="${S - pad + 18}" text-anchor="end">Risk-on</text>
+    <text class="axl" x="${mid}" y="${S - 6}" text-anchor="middle">SELL stocks  ←  →  BUY stocks</text>
+    <text class="axl" x="14" y="${mid}" text-anchor="middle" transform="rotate(-90 14 ${mid})">SELL bonds  ←  →  BUY bonds</text>
+    ${dots}${w}</svg>`;
+}
+
+function renderRisk() {
+  const { tf } = state;
+  const world = worldRegime(tf);
+  const when = tf === "D" ? "today" : `this ${TF_WORD[tf]}`;
+
+  // Gauge in the situation report
+  $("#riskTug").hidden = !world;
+  if (world) {
+    const R = REGIME[world.key];
+    const safe = Math.max(0.04, Math.min(0.96, (2 - world.tilt) / 4));
+    $("#riskSafe").style.width = `${safe * 100}%`;
+    $("#riskOn").style.width = `${(1 - safe) * 100}%`;
+    $("#riskVerdict").textContent = R.world;
+    $("#riskVerdict").className = `rg-${world.key}`;
+    $("#riskBondTxt").innerHTML = `Safe bonds ${chip(sideOf(world.bonds.score, WORLD_T))}`;
+    $("#riskStockTxt").innerHTML = `Stocks ${chip(sideOf(world.stocks.score, WORLD_T))}`;
+  }
+
+  // Panel
+  const views = Object.values(state.views);
+  const both = views.filter((v) => v.regime);
+  const points = both.map((v) => ({ code: v.code, name: v.name, key: v.regime, x: v.groups.stocks.score, y: v.groups.bonds.score, stock: sideOf(v.groups.stocks.score, COUNTRY_T), bond: sideOf(v.groups.bonds.score, COUNTRY_T) }));
+  $("#riskChart").innerHTML = riskChartSvg(points, world);
+  $("#riskMeta").textContent = `Stocks against government bonds on the ${TF_WORD[tf]}. ${both.length} of ${views.length} countries have both in this data.`;
+
+  if (world) {
+    const R = REGIME[world.key];
+    const hav = (sym) => state.data.markets.find((m) => sym.includes(m.symbol))?.tf[tf];
+    const word = (st) => { const s = st ? control(st).score : 0; return s >= 0.5 ? "bought" : s <= -0.5 ? "sold" : "undecided"; };
+    $("#riskWorld").innerHTML = `<div class="rw-k">The world ${when}</div>
+      <div class="rw-name rg-${world.key}">${esc(R.world)}</div>
+      <p class="rw-line">${chip(sideOf(world.stocks.score, WORLD_T))} <b>stocks</b> <small>${world.stocks.sell} of ${world.stocks.n} stock markets sold, ${world.stocks.buy} bought</small></p>
+      <p class="rw-line">${chip(sideOf(world.bonds.score, WORLD_T))} <b>safe-haven bonds</b> <small>${world.bonds.buy} of ${world.bonds.n} bought, ${world.bonds.sell} sold</small></p>
+      <p class="rw-words">${esc(R.words)}</p>
+      <p class="rw-also">Other safe havens: gold ${word(hav(["GC=F", "GLD"]))}, US dollar ${word(hav(["DX-Y.NYB", "UUP"]))}.</p>`;
+  } else {
+    $("#riskWorld").innerHTML = `<div class="rw-k">The world ${when}</div><p class="rw-words">Waiting for stock and safe-haven bond data.</p>`;
+  }
+
+  // World regime history for this timeframe (one cell per bar)
+  const hist = buildReplay("stocks", tf, "bar", tf === "D" ? 60 : 260).filter((f) => f.regime);
+  $("#riskHist").innerHTML = hist.length > 1
+    ? `<div class="rw-k">World regime, last ${hist.length} ${TF_WORD[tf]}s</div><div class="rh-strip">${hist.map((f) => `<i class="rgb-${f.regime}" title="${esc(f.d)}: ${esc(REGIME[f.regime].world)}"></i>`).join("")}</div>
+       <div class="rh-key"><span><i class="rgb-risk-on"></i>Risk-on</span><span><i class="rgb-safety"></i>Flight to safety</span><span><i class="rgb-sold"></i>Everything sold</span><span><i class="rgb-bought"></i>Everything bought</span><span><i class="rgb-mixed"></i>No clear regime</span><span>Dim color = leaning that way</span></div>`
+    : "";
+
+  // Countries, grouped by regime, in buy / sell words
+  let list = "";
+  for (const key of REGIME_ORDER) {
+    const rows = points.filter((p) => p.key === key);
+    if (!rows.length) continue;
+    const R = REGIME[key];
+    list += `<h4 class="rk-group rg-${key}">${esc(R.name)}${R.acts ? `<small>${esc(R.acts)}</small>` : ""}</h4><p class="rk-words">${esc(R.words)}</p>`;
+    list += rows.map((p) => `<button class="rk-row" data-country="${p.code}"><span class="rk-name">${cc(p.code)}${esc(p.name)}</span><span class="rk-acts">${chip(p.stock)} stocks ${chip(p.bond)} bonds</span></button>`).join("");
+  }
+  const none = views.filter((v) => !v.regime).length;
+  $("#riskList").innerHTML = (list || `<p class="rk-words">No country has both a stock market and a government-bond market loaded yet.</p>`)
+    + (none ? `<p class="rk-none">${none} countries have no government-bond market in this data, so they show stocks only.</p>` : "");
 }
 
 // "A", "A and B", "A, B and C"
@@ -376,7 +498,7 @@ function renderIntel() {
   const rev = state.flow === "reversal";
   const { src, dst } = rev ? flowPairs((code) => revScore(code), FLOW_MIN.reversal) : flowPairs((code) => state.views[code]?.groups[asset]?.score);
   const names = (arr) => joinWords(arr.slice(0, 3).map((p) => esc(state.views[p.code].name)));
-  const k = `<span class="flow-k">${rev ? "Reversal flow" : "Money flow"} this ${TF_WORD[tf]}</span>`;
+  const k = `<span class="flow-k">${rev ? "Reversal flow" : "Money flow"} ${tf === "D" ? "today" : `this ${TF_WORD[tf]}`}</span>`;
   $("#flowLine").hidden = state.flow !== "control"; // in reversal mode the headline says it
   $("#flowLine").innerHTML = src.length && dst.length
     ? `${k}${rev ? "Reversing down, money leaving" : "Out of"} <b class="down">${names(src)}</b> <span class="flow-arrow">→</span> ${rev ? "reversing up, money arriving in" : "into"} <b class="up">${names(dst)}</b>`
@@ -390,14 +512,11 @@ function insights() {
   const revs = state.data.markets.map((m) => reversal(m.tf[tf])).filter(isTurn);
   const ru = revs.filter((r) => r.dir > 0).length, rd = revs.length - ru;
   if (revs.length) out.push(`↺ <b>${ru}</b> markets are reversing up and <b>${rd}</b> are reversing down this ${TF_WORD[tf]}. <a href="#reversals">See them</a>.`);
-  for (const v of Object.values(state.views)) {
-    const s = v.groups.stocks?.verdict, b = v.groups.bonds?.verdict;
-    if (!s || !b) continue;
-    const name = esc(v.name);
-    if (s === "BUY" && b === "SELL") out.push(`<b>Risk-on in ${name}</b>: bonds sold (yields rising), stocks bought.`);
-    else if (s === "SELL" && b === "BUY") out.push(`<b>Flight to safety in ${name}</b>: stocks sold, bonds bought (yields falling).`);
-    else if (s === "SELL" && b === "SELL") out.push(`<b>Capital leaving ${name}</b>: stocks <b>and</b> bonds sold (yields rising).`);
-    else if (s === "BUY" && b === "BUY") out.push(`<b>Liquidity wave in ${name}</b>: stocks and bonds both bought (yields falling).`);
+  const rg = Object.values(state.views).filter((v) => v.regime);
+  const named = (key) => rg.filter((v) => v.regime === key).map((v) => esc(v.name));
+  for (const key of ["safety", "risk-on", "sold", "bought"]) {
+    const n = named(key);
+    if (n.length) out.push(`<b>${REGIME[key].name}</b> (${REGIME[key].acts}): ${joinWords(n.slice(0, 4))}${n.length > 4 ? ` and ${n.length - 4} more` : ""}. <a href="#riskmap">Risk map</a>.`);
   }
   const sectors = state.data.markets.filter((m) => m.kind === "sector" && m.tf[tf]);
   if (sectors.length) {
@@ -479,7 +598,7 @@ function renderCountries() {
     return `<button class="tile ${g?.ftfc > 0 ? "ftfc-up" : g?.ftfc < 0 ? "ftfc-down" : ""}${g ? "" : " dim"}" data-country="${v.code}">
       <div class="cap"><span class="name">${cc(v.code)}${esc(v.name)}</span>
       <span class="verdict ${vClass(verdict)}">${esc(verdict)}</span></div>
-      ${rows}${ftfcTag(g?.ftfc)}${rev ? `<div class="rev-tag ${rev.dir > 0 ? "up" : "down"}"${tipAttr(rev.doc)}>↺ ${esc(rev.name)} on the ${TF_WORD[tf]}</div>` : ""}
+      ${rows}${ftfcTag(g?.ftfc)}${v.regime && REGIME[v.regime].tag ? `<div class="rg-tag rg-${v.regime}" title="${esc(REGIME[v.regime].acts)}. ${esc(REGIME[v.regime].words)}">${esc(REGIME[v.regime].name)}</div>` : ""}${rev ? `<div class="rev-tag ${rev.dir > 0 ? "up" : "down"}"${tipAttr(rev.doc)}>↺ ${esc(rev.name)} on the ${TF_WORD[tf]}</div>` : ""}
     </button>`;
   }).join("");
 
@@ -575,11 +694,13 @@ function buildReplay(asset, tf, step, days) {
   for (let i = from; i < axis.length; i++) {
     if (step === "day" || tf === "D" || i === axis.length - 1 || keys[i + 1] !== keys[i]) idx.push(i);
   }
-  const frames = idx.map((i) => ({ d: axis[i], i, sum: {}, cnt: {}, rsum: {}, up: 0, down: 0 }));
+  const frames = idx.map((i) => ({ d: axis[i], i, sum: {}, cnt: {}, rsum: {}, up: 0, down: 0, ws: 0, wn: 0, bs: 0, bn: 0 }));
   const at = new Map(idx.map((i, k) => [i, frames[k]]));
   for (const m of state.data.markets) {
     const line = m.tl?.[tf];
-    if (!line || assetOf(m) !== asset || m.country === "GLOBAL") continue;
+    const mine = assetOf(m) === asset && m.country !== "GLOBAL";
+    const isIndex = m.kind === "index", isHaven = HAVEN_BONDS.has(m.symbol); // the world regime legs
+    if (!line || !(mine || isIndex || isHaven)) continue;
     const done = []; // final scenario of each completed bar
     let lastKey = null, last = null;
     for (let i = 0; i < axis.length; i++) {
@@ -588,7 +709,11 @@ function buildReplay(asset, tf, step, days) {
       last = decodeState(line[i]);
       const f = at.get(i);
       if (!f || !last) continue;
-      f.sum[m.country] = (f.sum[m.country] ?? 0) + control(last).score;
+      const sc = control(last).score;
+      if (isIndex) { f.ws += sc; f.wn++; }
+      if (isHaven) { f.bs += sc; f.bn++; }
+      if (!mine) continue;
+      f.sum[m.country] = (f.sum[m.country] ?? 0) + sc;
       f.cnt[m.country] = (f.cnt[m.country] ?? 0) + 1;
       const prev2 = done.slice(-2);
       const r = reversal({ q: [...prev2.map((x) => x.s), last.s], qg: [...prev2.map((x) => x.g), last.g], g: last.g });
@@ -600,7 +725,7 @@ function buildReplay(asset, tf, step, days) {
   return frames.map((f) => {
     const scores = {}, rev = {};
     for (const c in f.sum) { scores[c] = f.sum[c] / f.cnt[c]; rev[c] = f.rsum[c] / f.cnt[c]; }
-    return { d: f.d, scores, rev, up: f.up, down: f.down };
+    return { d: f.d, scores, rev, up: f.up, down: f.down, regime: f.wn && f.bn ? regime(f.ws / f.wn, f.bs / f.bn, WORLD_T) : null };
   });
 }
 
@@ -646,7 +771,7 @@ function startReplay() {
     if (i >= frames.length) { stopReplay(); return; }
     const f = frames[i];
     state.frame = f;
-    $("#hudReplay").textContent = `REPLAY · ${TF_HUD[tf]} BARS · ${step === "day" ? "BY DAY" : "BY BAR"} · ${f.d} · ▲${f.up} ▼${f.down}`;
+    $("#hudReplay").textContent = `REPLAY · ${TF_HUD[tf]} BARS · ${step === "day" ? "BY DAY" : "BY BAR"} · ${f.d} · ▲${f.up} ▼${f.down}${f.regime ? ` · ${REGIME[f.regime].world.toUpperCase()}` : ""}`;
     $("#replayProg").style.width = `${((i + 1) / frames.length) * 100}%`;
     const cur = $("#pulseCursor"), k = pulseIdx.get(f.d);
     if (cur && k !== undefined) { const x = PULSE.pad + k * bw + bw / 2; cur.setAttribute("x1", x); cur.setAttribute("x2", x); cur.setAttribute("visibility", "visible"); }
@@ -704,6 +829,7 @@ function openCountry(code, refocus = true) {
   };
   $("#drawerBody").innerHTML = `<div class="dr-kicker">Target acquired. ${v.side}, ${TF_WORD[tf]} bars.</div>
     <h3 id="drawerTitle">${cc(v.code)}${esc(v.name)}</h3><p class="dr-say">${esc(say)}</p>
+    ${v.regime ? `<p class="dr-regime"><b class="rg-${v.regime}">${esc(REGIME[v.regime].name)}.</b> ${chip(sideOf(v.groups.stocks.score, COUNTRY_T))} stocks ${chip(sideOf(v.groups.bonds.score, COUNTRY_T))} bonds. ${esc(REGIME[v.regime].words)}</p>` : ""}
     ${Object.entries(v.groups).map(([a, g]) => `<div class="dr-group"><h4>${a.toUpperCase()} <span class="verdict ${vClass(g.verdict)}">${esc(g.verdict)}</span></h4>${g.members.map(item).join("")}</div>`).join("")}
     <p class="disclaim">Education only. Not investment advice.</p>`;
   const wasHidden = $("#drawer").hidden;
@@ -853,6 +979,7 @@ function initGlobe(world, start) {
 
   function draw(t) {
     const P = SENSOR[state.sensor];
+    const paintRegime = state.paint === "regime" && !state.frame; // replay always shows buy / sell
     useView();
     const flat = isFlat();
     if (!flat) globeProj.rotate(rot);
@@ -870,7 +997,8 @@ function initGlobe(world, start) {
       const code = byIso.get(f.id);
       const s = code ? scoreOf(code) : undefined;
       ctx.beginPath(); path(f);
-      ctx.fillStyle = s === undefined ? P.land : heat(s);
+      const rg = paintRegime && code ? state.views[code]?.regime : null;
+      ctx.fillStyle = paintRegime ? (rg ? regimeFill(rg, P) : P.land) : s === undefined ? P.land : heat(s);
       ctx.fill();
       const hot = code && (code === state.hover || code === state.focus || code === state.mine);
       ctx.strokeStyle = hot ? P.text : P.line;
@@ -900,7 +1028,7 @@ function initGlobe(world, start) {
       ctx.strokeStyle = heat(s, 0.5 * (1 - pulse)); ctx.lineWidth = 1; ctx.stroke();
       ctx.beginPath(); ctx.arc(x, y, 2.6, 0, 2 * Math.PI); ctx.fillStyle = P.text; ctx.fill();
       if (rev) { ctx.beginPath(); ctx.arc(x, y, 7, -Math.PI / 2, Math.PI); ctx.strokeStyle = P.text; ctx.lineWidth = 1.2; ctx.stroke(); }
-      const label = state.frame ? code : `${code} ${st ? S_LABEL[st.s] : ""}${rev ? " ↺" : ""}`;
+      const label = state.frame ? code : paintRegime ? `${code} ${v.regime ? REGIME[v.regime].tag : ""}` : `${code} ${st ? S_LABEL[st.s] : ""}${rev ? " ↺" : ""}`;
       const lw = ctx.measureText(label).width;
       if (placed.some((b) => x + 9 < b.x + b.w && x + 9 + lw > b.x && Math.abs(y - b.y) < 11)) continue;
       placed.push({ x: x + 9, y, w: lw });
@@ -1051,9 +1179,26 @@ function initGlobe(world, start) {
   };
 }
 
+// Regime colors for the canvas, read from the CSS tokens of the current sensor mode.
+let regimeColors = {};
+function readRegimeColors() {
+  const css = getComputedStyle(document.body);
+  const v = (n) => css.getPropertyValue(n).trim();
+  regimeColors = { "risk-on": v("--rg-on"), safety: v("--rg-safe"), sold: v("--rg-sold"), bought: v("--rg-wave") };
+}
+function regimeFill(key, P) {
+  const base = regimeColors[key.replace("lean-", "")] ?? null;
+  if (!base) return d3.interpolateRgb(P.land, P.text)(0.12); // no clear regime
+  return key.startsWith("lean-") ? d3.interpolateRgb(P.land, base)(0.4) : base;
+}
+
 function renderLegend() {
+  if (state.paint === "regime") {
+    $("#legend").innerHTML = ["risk-on", "safety", "sold", "bought"].map((k) => `<span class="lg"><i class="rgb-${k}"></i>${REGIME[k].tag}</span>`).join("");
+    return;
+  }
   const stops = d3.range(0, 1.01, 0.1).map((t) => heat(t * 2 - 1)).join(",");
-  $("#legendBar").style.background = `linear-gradient(90deg, ${stops})`;
+  $("#legend").innerHTML = `<span>SELLING</span><i class="lg-bar" style="background:linear-gradient(90deg, ${stops})"></i><span>BUYING</span>`;
 }
 
 /* ---------- Share ---------- */
@@ -1071,6 +1216,7 @@ function shareText() {
   return [
     `GOD'S EYE VIEW of the world's money (${TF_HUD[state.tf]} bars):`,
     $("#headline").textContent,
+    ...(() => { const w = worldRegime(); return w ? [`World regime: ${REGIME[w.key].world.toUpperCase()} (stocks ${sideOf(w.stocks.score, WORLD_T)}, safe-haven bonds ${sideOf(w.bonds.score, WORLD_T)}).`] : []; })(),
     ...(state.flow === "off" ? [] : [`Money flow: ${$("#flowLine").textContent.slice($("#flowLine .flow-k")?.textContent.length ?? 0)}`]),
     ...topCalls().map((c) => c.text),
     `Headlines tell stories. Price tells the truth.`,
@@ -1108,7 +1254,8 @@ function composeCard(x, W, H) {
   x.fillText(`GOD'S EYE VIEW // PRICE TRUTH // ${TF_HUD[state.tf]} BARS`, W / 2, 46 * k);
   x.textAlign = "left";
   x.fillStyle = v("--accent"); x.font = font(600, 26, MONO);
-  x.fillText(`SITUATION REPORT · ${state.asset.toUpperCase()} · ${state.data.generatedAt.slice(0, 10)}`, 60 * k, 150 * k);
+  const wr = worldRegime();
+  x.fillText(`${wr ? `${REGIME[wr.key].world.toUpperCase()} · ` : ""}${state.asset.toUpperCase()} · ${state.data.generatedAt.slice(0, 10)}`, 60 * k, 150 * k);
   x.fillStyle = v("--fg"); x.font = font(700, 68, DISP);
   wrapText(x, $("#headline").textContent, 60 * k, 235 * k, 960 * k, 78 * k);
 
@@ -1325,7 +1472,7 @@ function setPressed(segId, v) {
 let pendingCountry = null; // a shared #c= link whose country has not loaded yet
 function writeHash() {
   const c = state.focus ?? pendingCountry;
-  history.replaceState(null, "", `${location.pathname}${location.search}#tf=${state.tf}&asset=${state.asset}&sensor=${state.sensor}&flow=${state.flow}&view=${state.view}${c ? `&c=${c}` : ""}`);
+  history.replaceState(null, "", `${location.pathname}${location.search}#tf=${state.tf}&asset=${state.asset}&sensor=${state.sensor}&flow=${state.flow}&view=${state.view}${state.paint === "regime" ? "&paint=regime" : ""}${c ? `&c=${c}` : ""}`);
 }
 
 function update(patch = {}) {
@@ -1335,14 +1482,16 @@ function update(patch = {}) {
   if (patch.tf || !Object.keys(state.views).length) state.views = buildViews(state.tf);
   document.body.dataset.sensor = state.sensor;
   setPressed("tfSeg", state.tf); setPressed("assetSeg", state.asset); setPressed("sensorSeg", state.sensor);
-  $("#hudMode").textContent = `SENSOR ${state.sensor === "flir" ? "FLIR · BUYING RUNS HOT" : state.sensor === "nvg" ? "NVG" : "NORMAL"}`;
+  $("#hudMode").textContent = `SENSOR ${state.sensor === "flir" ? "FLIR · BUYING RUNS HOT" : state.sensor === "nvg" ? "NVG" : "NORMAL"}${state.paint === "regime" ? " · COLOR: RISK REGIME" : ""}`;
   $("#hudTf").textContent = `TF ${TF_HUD[state.tf]} · ${state.asset.toUpperCase()}`;
   setPressed("flowSeg", state.flow);
   setPressed("viewSeg", state.view);
+  setPressed("paintSeg", state.paint);
+  readRegimeColors();
   document.body.dataset.view = state.view;
   $("#dragHint").textContent = state.view === "flat" ? "DRAG TO PAN · CLICK A COUNTRY" : "DRAG TO ROTATE · CLICK A COUNTRY";
   $("#flowHint").textContent = state.flow === "reversal" ? "ARCS: REVERSING DOWN → REVERSING UP" : state.flow === "control" ? "ARCS: MONEY LEAVING SELLERS → BUYERS" : "";
-  renderLegend(); renderIntel(); renderCountries(); renderReversals(); renderReplayControls();
+  renderLegend(); renderIntel(); renderRisk(); renderCountries(); renderReversals(); renderReplayControls();
   globe?.redraw();
   if (state.focus && !$("#drawer").hidden) openCountry(state.focus, false);
   else writeHash();
@@ -1375,6 +1524,7 @@ function wireControls() {
   $("#rangeSeg").addEventListener("click", (e) => { if (e.target.dataset.v) { stopReplay(); state.replayRange = e.target.dataset.v; renderReplayControls(); } });
   $("#flowSeg").addEventListener("click", (e) => e.target.dataset.v && update({ flow: e.target.dataset.v }));
   $("#viewSeg").addEventListener("click", (e) => e.target.dataset.v && update({ view: e.target.dataset.v }));
+  $("#paintSeg").addEventListener("click", (e) => e.target.dataset.v && update({ paint: e.target.dataset.v }));
   document.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey || e.target.matches("input, textarea")) return;
     const k = e.key.toUpperCase();
@@ -1401,6 +1551,7 @@ function readHash() {
   if (["normal", "flir", "nvg"].includes(p.get("sensor"))) out.sensor = p.get("sensor");
   if (["control", "reversal", "off"].includes(p.get("flow"))) out.flow = p.get("flow");
   if (["globe", "flat"].includes(p.get("view"))) out.view = p.get("view");
+  out.paint = p.get("paint") === "regime" ? "regime" : "control";
   return { patch: out, country: p.get("c")?.toUpperCase() };
 }
 

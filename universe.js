@@ -249,3 +249,8 @@ export const BYOK_MARKETS = [
   u("RY", "Royal Bank of Canada", "CA", "stock"),
   u("PBR", "Petrobras (ADR)", "BR", "stock"),
 ];
+
+// Safe-haven government bonds for the WORLD risk gauge: developed-market sovereigns that money runs to in a
+// flight to safety. Emerging-market, China, India, Brazil, Korea and Italy bonds are left out on purpose:
+// in a real flight to safety they are sold with the stocks. (A country's own regime still uses its own bonds.)
+export const HAVEN_BONDS = new Set(["TLT", "IEF", "XGB.TO", "IGLT.L", "EXX6.DE", "2561.T", "IGB.AX", "BWX"]);

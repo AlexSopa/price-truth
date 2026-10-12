@@ -66,6 +66,7 @@ npm test   # engine, parsers, providers, signals
 - FTFC UP / DN: the last sale above / below the year, quarter, month, week and day opens.
 - Country verdict per timeframe = average of its markets: 2U green +1, 2D red −1, 3 ±0.5 by close, failed 2 ±0.25, 1 = 0. ≥ 0.5 BUY, ≤ −0.5 SELL. BUY / SELL only names who controls the bar.
 - Bonds are bond-fund prices: 2D on a bond fund = that country's debt is being sold = its yields are rising.
+- Risk regime, from BUY / SELL on stocks and on government bonds: BUY stocks + SELL bonds = risk-on; SELL stocks + BUY bonds = flight to safety; both sold = everything sold (capital leaving); both bought = everything bought (liquidity wave). A country uses its own stocks and its own bonds (score ≥ 0.5 / ≤ −0.5). The world uses every country's stock market against safe-haven government bonds only (`HAVEN_BONDS` in `universe.js`; net 20% of markets on one side). Emerging-market bonds are not safe havens.
 - Money flow arcs show pressure (sellers in control → buyers in control, or reversing down → reversing up), not tracked transfers.
 - West = Americas, Europe, Africa. East = Asia (incl. Middle East) and Oceania.
 

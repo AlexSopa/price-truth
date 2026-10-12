@@ -153,3 +153,16 @@ assert.equal(secret.ct.includes("world"), false);
 assert.deepEqual(await unseal(secret, "correct horse battery staple"), { hello: "world", n: [1, 2, 3] });
 await assert.rejects(unseal(secret, "wrong password"));
 console.log("vault: all tests pass");
+
+// ---- Risk regime: stocks vs bonds ----
+const { regime } = await import("../strat.js");
+assert.equal(regime(1, -1), "risk-on"); // stocks bought, bonds sold
+assert.equal(regime(-1, 1), "safety"); // stocks sold, bonds bought
+assert.equal(regime(-0.5, -0.5), "sold"); // both sold: capital leaving
+assert.equal(regime(0.5, 1), "bought"); // both bought: liquidity wave
+assert.equal(regime(1, 0), "lean-risk-on"); // bonds undecided, stocks bought
+assert.equal(regime(0, 1), "lean-safety"); // stocks undecided, bonds bought
+assert.equal(regime(0.25, 0), "mixed");
+assert.equal(regime(-0.3, 0.25, 0.2), "safety"); // the world gauge uses a lower bar (net 20% of markets)
+assert.equal(regime(undefined, 1), null); // no bond data, no regime
+console.log("regime: all tests pass");
