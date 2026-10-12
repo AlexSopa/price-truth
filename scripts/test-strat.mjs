@@ -166,3 +166,14 @@ assert.equal(regime(0.25, 0), "mixed");
 assert.equal(regime(-0.3, 0.25, 0.2), "safety"); // the world gauge uses a lower bar (net 20% of markets)
 assert.equal(regime(undefined, 1), null); // no bond data, no regime
 console.log("regime: all tests pass");
+
+// ---- Market context: every market on the page explains itself ----
+const { about } = await import("../about.js");
+const { MARKETS, BYOK_MARKETS } = await import("../universe.js");
+for (const mk of [...MARKETS, ...BYOK_MARKETS]) {
+  const a = about(mk);
+  assert.ok(a && a.text.length > 20 && a.kind,`no tooltip text for ${mk.symbol} (${mk.name})`);
+}
+assert.equal(about({ symbol: "SPY", kind: "index" }).text, about({ symbol: "^GSPC", kind: "index" }).text); // a fund reads as its index
+assert.equal(about({ symbol: "NOPE", kind: "stock" }), null);
+console.log("market context: all tests pass");

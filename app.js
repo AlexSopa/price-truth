@@ -3,6 +3,7 @@ import { TIMEFRAMES, control, continuity, reversal, isTurn, decodeState, periodK
 import { buildSignals } from "./signals.js?v=6";
 import { PROVIDERS, loadMarkets } from "./byok.js?v=6";
 import { unseal } from "./vault.js?v=6";
+import { about, BOND_BASICS } from "./about.js?v=1";
 
 const TF_NAME = { D: "Today", W: "This week", M: "This month", Q: "This quarter", Y: "This year" };
 const TF_WORD = { D: "day", W: "week", M: "month", Q: "quarter", Y: "year" };
@@ -45,6 +46,8 @@ const tipAttr = (key, extra = "") => (DOCS[key] ? ` data-tip="${key}"${extra ? `
 // A label that is also a link: hover shows the definition, a click opens its page on TheStrat.ai.
 const docAttr = (key, extra = "") => (DOCS[key] ? `${tipAttr(key, extra)} data-doc="${key}" role="link"` : "");
 const docsUrl = (key) => `https://thestrat.ai/docs/${DOCS[key].src}/`;
+// A market name with context: hover shows what the market is, in plain words (about.js).
+const aboutAttr = (m) => (m && about(m) ? ` data-about="${esc(m.symbol)}"` : "");
 const SIGNAL_STORY = {
   rev: ["Sellers had control. Buyers took it back.", "Buyers had control. Sellers took it back."],
   cont: ["Buyers paused, then pushed on.", "Sellers paused, then pushed on."],
@@ -509,7 +512,7 @@ function renderIntel() {
   $("#calls").innerHTML = cards.length
     ? cards.map(({ v, g, agree }) => `<button class="call ${vClass(g.verdict)}" data-country="${v.code}">
           <b>${cc(v.code)}${esc(callText(v, asset, g.verdict))}</b>
-          <span>${esc(g.lead.name)} · ${S_LABEL[g.lead.tf[tf].s]} on the ${TF_WORD[tf]}${asset === "bonds" ? ` · ${rateWords(g.verdict)}` : ""}${agree ? ` · <em${docAttr("ftfc")}>FTFC ${g.verdict === "BUY" ? "UP" : "DN"}</em>` : ""}</span></button>`).join("")
+          <span><span${aboutAttr(g.lead)}>${esc(g.lead.name)}</span> · ${S_LABEL[g.lead.tf[tf].s]} on the ${TF_WORD[tf]}${asset === "bonds" ? ` · ${rateWords(g.verdict)}` : ""}${agree ? ` · <em${docAttr("ftfc")}>FTFC ${g.verdict === "BUY" ? "UP" : "DN"}</em>` : ""}</span></button>`).join("")
     : `<div class="calls-empty">NO CLEAN CALLS ON THIS TIMEFRAME. THE WORLD IS UNDECIDED.</div>`;
 
   $("#insights").innerHTML = insights().map((t) => `<li>${t}</li>`).join("");
@@ -540,8 +543,8 @@ function insights() {
   if (sectors.length) {
     const ranked = [...sectors].sort((a, b) => control(b.tf[tf]).score - control(a.tf[tf]).score);
     const top = ranked[0], bot = ranked[ranked.length - 1];
-    if (control(top.tf[tf]).score >= 0.5) out.push(`Strongest world sector: <b>${esc(top.name)}</b> (${S_LABEL[top.tf[tf].s]}).`);
-    if (control(bot.tf[tf]).score <= -0.5) out.push(`Weakest world sector: <b>${esc(bot.name)}</b> (${S_LABEL[bot.tf[tf].s]}).`);
+    if (control(top.tf[tf]).score >= 0.5) out.push(`Strongest world sector: <b${aboutAttr(top)}>${esc(top.name)}</b> (${S_LABEL[top.tf[tf].s]}).`);
+    if (control(bot.tf[tf]).score <= -0.5) out.push(`Weakest world sector: <b${aboutAttr(bot)}>${esc(bot.name)}</b> (${S_LABEL[bot.tf[tf].s]}).`);
   }
   const gold = state.data.markets.find((m) => m.symbol === "GC=F" || m.symbol === "GLD")?.tf[tf];
   if (gold?.s === "2u" && gold.g > 0) out.push(`<b>Gold</b> is breaking out this ${TF_WORD[tf]}.`);
@@ -586,7 +589,7 @@ function renderMine() {
   $("#mine").innerHTML = `<button class="mine ${vClass(g.verdict)}" data-country="${v.code}">
     <span class="mine-k">Your market: ${cc(v.code)}${esc(v.name)}</span>
     <b>${esc(VERDICT_WORDS[g.verdict])} ${state.tf === "D" ? "today" : `this ${TF_WORD[state.tf]}`}.</b>
-    <span>${esc(g.lead.name)}: ${green} of 5 timeframes green${rev ? `, ${rev.name}` : ""}. See inside →</span></button>`;
+    <span><span${aboutAttr(g.lead)}>${esc(g.lead.name)}</span>: ${green} of 5 timeframes green${rev ? `, ${rev.name}` : ""}. See inside →</span></button>`;
 }
 
 /* ---------- Render: tiles ---------- */
@@ -611,7 +614,7 @@ function renderCountries() {
     const g = v.groups[asset];
     const verdict = g ? g.verdict : `NO ${asset.toUpperCase()}`;
     const rows = ["stocks", "bonds"].filter((a) => v.groups[a]).map((a) =>
-      `<div class="row"><span class="lbl">${a.toUpperCase()}</span>${cells(v.groups[a].lead, tf)}</div>`).join("");
+      `<div class="row"><span class="lbl"${aboutAttr(v.groups[a].lead)}>${a.toUpperCase()}</span>${cells(v.groups[a].lead, tf)}</div>`).join("");
     const rev = g && reversal(g.lead.tf[tf]);
     return `<button class="tile ${g?.ftfc > 0 ? "ftfc-up" : g?.ftfc < 0 ? "ftfc-down" : ""}${g ? "" : " dim"}" data-country="${v.code}">
       <div class="cap"><span class="name">${cc(v.code)}${esc(v.name)}</span>
@@ -625,7 +628,7 @@ function renderCountries() {
     const c = control(m.tf[tf]);
     const ftfc = continuity(m.tf);
     return `<div class="tile ${ftfc > 0 ? "ftfc-up" : ftfc < 0 ? "ftfc-down" : ""}">
-      <div class="cap"><span class="name">${esc(m.name)}</span><span class="verdict ${c.score >= 0.5 ? "buy" : c.score <= -0.5 ? "sell" : ""}">${c.score >= 0.5 ? "BUYERS" : c.score <= -0.5 ? "SELLERS" : c.score === 0 ? "COILING" : c.score > 0 ? "LEANING UP" : "LEANING DOWN"}</span></div>
+      <div class="cap"><span class="name"${aboutAttr(m)}>${esc(m.name)}</span><span class="verdict ${c.score >= 0.5 ? "buy" : c.score <= -0.5 ? "sell" : ""}">${c.score >= 0.5 ? "BUYERS" : c.score <= -0.5 ? "SELLERS" : c.score === 0 ? "COILING" : c.score > 0 ? "LEANING UP" : "LEANING DOWN"}</span></div>
       <div class="row five">${cells(m, tf)}</div></div>`;
   }).join("");
 }
@@ -651,7 +654,7 @@ function renderReversals() {
       const head = st !== lastStory ? `<h4 class="rev-group">${esc(st)}</h4>` : "";
       lastStory = st;
       return `${head}<button class="rev-row" ${m.country !== "GLOBAL" ? `data-country="${m.country}"` : ""}>
-        <span class="rev-name">${cc(m.country)}${esc(m.name)}<small>${esc(m.country === "GLOBAL" ? m.kind : c.name)}</small></span>
+        <span class="rev-name">${cc(m.country)}<span${aboutAttr(m)}>${esc(m.name)}</span><small>${esc(m.country === "GLOBAL" ? m.kind : c.name)}</small></span>
         <span class="rev-chip ${dir > 0 ? "up" : "down"} k-${r.kind}"${docAttr(r.doc)}>${esc(r.name)}</span></button>`;
     }).join("") + more;
   };
@@ -912,7 +915,7 @@ function openCountry(code, refocus = true) {
     drawerMarkets.set(m.symbol, m);
     const rev = reversal(m.tf[tf]);
     const others = TIMEFRAMES.filter((t) => t !== tf).map((t) => [t, reversal(m.tf[t])]).filter(([, r]) => r);
-    return `<div class="dr-item"><div class="top"><b>${esc(m.name)}</b><span>${esc(m.symbol)} · ${m.live ? '<em class="live">● LIVE BAR</em>' : `LAST BAR ${esc(m.asOf)}`}${m.stale ? " · DATA DELAYED" : ""}</span></div>
+    return `<div class="dr-item"><div class="top"><b${aboutAttr(m)}>${esc(m.name)}</b><span>${esc(m.symbol)} · ${m.live ? '<em class="live">● LIVE BAR</em>' : `LAST BAR ${esc(m.asOf)}`}${m.stale ? " · DATA DELAYED" : ""}</span></div>
       ${sparkSvg(m, tf)}
       <div class="row five">${cells(m, tf)}</div>
       <p>${esc(explain(m.tf[tf], TF_WORD[tf]))}</p>
@@ -1524,13 +1527,30 @@ async function saveClip(kind) {
   }
 }
 
-/* ---------- Docs tooltips ---------- */
+/* ---------- Tooltips: TheStrat docs (data-tip) and market context (data-about) ---------- */
+
+const TIP_SEL = "[data-tip], [data-about]";
+
+// What a market is, for a reader who does not know it: kind and country, name, plain-words text.
+function aboutHtml(symbol) {
+  const m = state.data?.markets.find((x) => x.symbol === symbol);
+  const a = m && about(m);
+  if (!a) return "";
+  const place = m.country === "GLOBAL" ? "World" : COUNTRIES[m.country]?.name;
+  return `<span class="tip-x">${esc([a.kind, place].filter(Boolean).join(" · "))}</span><b>${esc(m.name)}</b><span class="tip-a">${esc(a.text)}</span>${a.via ? `<span class="tip-note">${esc(a.via)}</span>` : ""}${m.kind === "bond" ? `<span class="tip-note">${esc(BOND_BASICS)}</span>` : ""}`;
+}
+
+function docsHtml(el) {
+  const d = DOCS[el.dataset.tip];
+  if (!d) return "";
+  return `${el.dataset.tipx ? `<span class="tip-x">${esc(el.dataset.tipx)}</span>` : ""}<a class="tip-t" href="${docsUrl(el.dataset.tip)}" target="_blank" rel="noopener"><b>${esc(d.t)}</b></a><q>${esc(d.q)}</q>${d.note ? `<span class="tip-note">${esc(d.note)}</span>` : ""}<cite><a href="${docsUrl(el.dataset.tip)}" target="_blank" rel="noopener">Read the full definition on TheStrat.ai →</a>${el.dataset.doc ? " (or click the label)" : ""}</cite>`;
+}
 
 function showTip(el) {
-  const d = DOCS[el.dataset.tip];
-  if (!d) return;
+  const html = el.dataset.about ? aboutHtml(el.dataset.about) : docsHtml(el);
+  if (!html) return;
   const tip = $("#tip");
-  tip.innerHTML = `${el.dataset.tipx ? `<span class="tip-x">${esc(el.dataset.tipx)}</span>` : ""}<a class="tip-t" href="${docsUrl(el.dataset.tip)}" target="_blank" rel="noopener"><b>${esc(d.t)}</b></a><q>${esc(d.q)}</q>${d.note ? `<span class="tip-note">${esc(d.note)}</span>` : ""}<cite><a href="${docsUrl(el.dataset.tip)}" target="_blank" rel="noopener">Read the full definition on TheStrat.ai →</a>${el.dataset.doc ? " (or click the label)" : ""}</cite>`;
+  tip.innerHTML = html;
   tip.hidden = false;
   tipEl = el;
   const r = el.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
@@ -1547,7 +1567,7 @@ function wireTips() {
   // pointer often crosses another label: an open tooltip waits a moment before it switches to that label.
   document.addEventListener("mouseover", (e) => {
     if (e.target.closest("#tip")) { clearTimeout(tipTimer); clearTimeout(switchTimer); return; }
-    const el = e.target.closest("[data-tip]");
+    const el = e.target.closest(TIP_SEL);
     if (!el) { clearTimeout(switchTimer); hideTipSoon(); return; }
     clearTimeout(tipTimer);
     clearTimeout(switchTimer);
@@ -1555,12 +1575,13 @@ function wireTips() {
     if ($("#tip").hidden) showTip(el);
     else switchTimer = setTimeout(() => showTip(el), 260);
   });
-  document.addEventListener("focusin", (e) => { const el = e.target.closest("[data-tip]"); el ? showTip(el) : hideTip(); });
+  document.addEventListener("focusin", (e) => { const el = e.target.closest(TIP_SEL); el ? showTip(el) : hideTip(); });
   document.addEventListener("scroll", hideTip, { passive: true });
+  addEventListener("resize", hideTip);
   // Touch: tap a label to read it (labels inside tiles still open the country on tap).
   document.addEventListener("touchstart", (e) => {
     if (e.target.closest("#tip")) return;
-    const el = e.target.closest("[data-tip]");
+    const el = e.target.closest(TIP_SEL);
     el ? showTip(el) : hideTip();
   }, { passive: true });
 }

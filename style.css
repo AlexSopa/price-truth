@@ -611,3 +611,11 @@ body.rz-x { cursor: col-resize; } body.rz-y { cursor: row-resize; }
   .drawer-card { width: min(var(--drawer-w, 620px), 100%); }
 }
 @media (prefers-reduced-motion: reduce) { .rz::before, .rz::after { transition: none; } }
+
+
+/* Market context: hover a market name to read what it is. A dotted line marks the names that explain themselves. */
+[data-about] { cursor: help; }
+.dr-item .top b[data-about], .tile .name[data-about], .rev-name [data-about], .insights b[data-about] {
+  text-decoration: underline dotted var(--fg-4); text-underline-offset: 3px;
+}
+.tip .tip-a { font-size: 12.5px; line-height: 1.45; color: var(--fg-2); }
