@@ -308,16 +308,6 @@ body[data-view="flat"] .reticle { display: none; }
 .seq em { font: 9px var(--mono); color: var(--fg-4); font-style: normal; margin-right: 4px; letter-spacing: 0.06em; }
 .seq i { font: 600 9px var(--mono); font-style: normal; padding: 1px 4px; border-radius: 2px; background: var(--panel-3); color: var(--fg-3); }
 .seq i.g-up { background: var(--up-bg); color: var(--up); } .seq i.g-down { background: var(--down-bg); color: var(--down); }
-.spark { display: block; width: 100%; height: 80px; margin: 8px 0 0; background: var(--panel); border: 1px solid var(--border); border-radius: var(--r); }
-.spark .wick { stroke-width: 1; vector-effect: non-scaling-stroke; }
-.spark .wick.up { stroke: var(--up); } .spark .wick.down { stroke: var(--down); } .spark .wick.flat { stroke: var(--fg-3); }
-.spark .body.up { fill: var(--up); } .spark .body.down { fill: var(--down); } .spark .body.flat { fill: var(--fg-3); }
-.spark .body.cur { stroke: var(--fg); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.spark .trig { stroke: var(--fg-3); stroke-dasharray: 3 3; stroke-width: 1; vector-effect: non-scaling-stroke; }
-.spark-lbls { display: grid; margin: 2px 0 2px; }
-.spark-lbls i { font: 600 8.5px var(--mono); font-style: normal; text-align: center; color: var(--fg-3); }
-.spark-lbls i.s-2u { color: var(--up); } .spark-lbls i.s-2d { color: var(--down); } .spark-lbls i.s-3 { color: var(--gold); }
-.spark-cap { display: flex; justify-content: space-between; gap: 8px; font: 8.5px var(--mono); color: var(--fg-4); letter-spacing: 0.08em; }
 .dr-rev { font-weight: 600; } .dr-rev.up { color: var(--up); } .dr-rev.down { color: var(--down); }
 .dr-also { font: 10.5px var(--mono); color: var(--fg-3) !important; }
 .live { font-style: normal; color: var(--down); }
@@ -560,3 +550,27 @@ body[data-sensor="nvg"] { --rg-safe: #7fd36d; --rg-wave: #e6ffd9; }
 .tip .tip-t { color: inherit; text-decoration: none; } .tip .tip-t:hover b { text-decoration: underline; text-underline-offset: 3px; }
 .tip cite { color: var(--fg-3); }
 .lead a, .gate-card p a { color: var(--accent); }
+
+
+/* Country panel chart: "Precision ledger" (last 15 bars, prior high / low, signal bracket) */
+.spk { color: var(--fg-3); margin-top: 8px; }
+.spk .spk-row { display: flex; align-items: stretch; }
+.spk .spk-plot { position: relative; flex: 1 1 auto; min-width: 0; }
+.spk .spk-gut { position: relative; flex: 0 0 70px; }
+.spk .spk-svg { display: block; width: 100%; height: 124px; }
+.spk .spk-gl { fill: none; stroke: color-mix(in srgb, var(--fg-4) 70%, transparent); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.spk .spk-band { fill: color-mix(in srgb, var(--fg) 6%, transparent); stroke: none; }
+.spk .spk-ln { fill: none; stroke: var(--fg-2); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.spk .spk-wk { fill: none; stroke: currentColor; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.spk .spk-bd { fill: currentColor; stroke: none; }
+.spk .spk-br { fill: none; stroke: currentColor; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.spk .spk-u { color: var(--up); } .spk .spk-d { color: var(--down); } .spk .spk-f { color: var(--fg-3); } .spk .spk-gold { color: var(--gold); }
+.spk .spk-sig { position: absolute; top: 0; font: 600 10px/12px var(--mono); letter-spacing: 0.02em; white-space: nowrap; }
+.spk .spk-lbls, .spk .spk-nows { display: grid; }
+.spk .spk-lbls > span { font: 600 10px/12px var(--mono); text-align: center; white-space: nowrap; }
+.spk .spk-nows > div { display: flex; flex-direction: column; align-items: center; }
+.spk .spk-tk { width: 1px; height: 4px; margin-top: 2px; background: var(--accent); }
+.spk .spk-nw { font: 500 10px/12px var(--mono); color: var(--fg-2); white-space: nowrap; }
+.spk .spk-live { color: var(--fg); }
+.spk .spk-lv { position: absolute; left: 6px; font: 500 10px/12px var(--mono); color: var(--fg-2); white-space: nowrap; }
+.spk .spk-cap { margin-top: 8px; font: 400 11px/16px var(--sans); color: var(--fg-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
