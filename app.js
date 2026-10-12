@@ -42,6 +42,9 @@ const DOCS = {
   reversal: { t: "Reversal", src: "types-of-reversals", q: "A reversal is a sequence of scenarios that changes trend, with a defined trigger and target." },
 };
 const tipAttr = (key, extra = "") => (DOCS[key] ? ` data-tip="${key}"${extra ? ` data-tipx="${esc(extra)}"` : ""}` : "");
+// A label that is also a link: hover shows the definition, a click opens its page on TheStrat.ai.
+const docAttr = (key, extra = "") => (DOCS[key] ? `${tipAttr(key, extra)} data-doc="${key}" role="link"` : "");
+const docsUrl = (key) => `https://thestrat.ai/docs/${DOCS[key].src}/`;
 const SIGNAL_STORY = {
   rev: ["Sellers had control. Buyers took it back.", "Buyers had control. Sellers took it back."],
   cont: ["Buyers paused, then pushed on.", "Sellers paused, then pushed on."],
@@ -458,7 +461,7 @@ function renderIntel() {
     ["down", n["2d"], "Broke the low", "2D"],
     ["", n["1"], "Coiling", "1"],
     ["out", n["3"], "Broke both", "3"],
-  ].map(([c, v, l, code], i) => `<div class="count ${c}"${tipAttr(["2u", "2d", "1", "3"][i])}><b>${v}</b><span>${l} <em>${code}</em></span></div>`).join("");
+  ].map(([c, v, l, code], i) => `<div class="count ${c}"${docAttr(["2u", "2d", "1", "3"][i])}><b>${v}</b><span>${l} <em>${code}</em></span></div>`).join("");
 
   // East vs West
   const side = (s) => {
@@ -491,7 +494,7 @@ function renderIntel() {
   $("#calls").innerHTML = cards.length
     ? cards.map(({ v, g, agree }) => `<button class="call ${vClass(g.verdict)}" data-country="${v.code}">
           <b>${cc(v.code)}${esc(callText(v, asset, g.verdict))}</b>
-          <span>${esc(g.lead.name)} · ${S_LABEL[g.lead.tf[tf].s]} on the ${TF_WORD[tf]}${asset === "bonds" ? ` · ${rateWords(g.verdict)}` : ""}${agree ? ` · <em${tipAttr("ftfc")}>FTFC ${g.verdict === "BUY" ? "UP" : "DN"}</em>` : ""}</span></button>`).join("")
+          <span>${esc(g.lead.name)} · ${S_LABEL[g.lead.tf[tf].s]} on the ${TF_WORD[tf]}${asset === "bonds" ? ` · ${rateWords(g.verdict)}` : ""}${agree ? ` · <em${docAttr("ftfc")}>FTFC ${g.verdict === "BUY" ? "UP" : "DN"}</em>` : ""}</span></button>`).join("")
     : `<div class="calls-empty">NO CLEAN CALLS ON THIS TIMEFRAME. THE WORLD IS UNDECIDED.</div>`;
 
   $("#insights").innerHTML = insights().map((t) => `<li>${t}</li>`).join("");
@@ -583,7 +586,7 @@ function cells(m, selTf) {
   }).join("");
 }
 
-const ftfcTag = (ftfc) => (ftfc ? `<div class="ftfc-tag ${ftfc > 0 ? "up" : "down"}"${tipAttr("ftfc")}>${ftfc > 0 ? "▲ FTFC UP" : "▼ FTFC DN"}</div>` : "");
+const ftfcTag = (ftfc) => (ftfc ? `<div class="ftfc-tag ${ftfc > 0 ? "up" : "down"}"${docAttr("ftfc")}>${ftfc > 0 ? "▲ FTFC UP" : "▼ FTFC DN"}</div>` : "");
 
 function renderCountries() {
   const { tf, asset } = state;
@@ -598,7 +601,7 @@ function renderCountries() {
     return `<button class="tile ${g?.ftfc > 0 ? "ftfc-up" : g?.ftfc < 0 ? "ftfc-down" : ""}${g ? "" : " dim"}" data-country="${v.code}">
       <div class="cap"><span class="name">${cc(v.code)}${esc(v.name)}</span>
       <span class="verdict ${vClass(verdict)}">${esc(verdict)}</span></div>
-      ${rows}${ftfcTag(g?.ftfc)}${v.regime && REGIME[v.regime].tag ? `<div class="rg-tag rg-${v.regime}" title="${esc(REGIME[v.regime].acts)}. ${esc(REGIME[v.regime].words)}">${esc(REGIME[v.regime].name)}</div>` : ""}${rev ? `<div class="rev-tag ${rev.dir > 0 ? "up" : "down"}"${tipAttr(rev.doc)}>↺ ${esc(rev.name)} on the ${TF_WORD[tf]}</div>` : ""}
+      ${rows}${ftfcTag(g?.ftfc)}${v.regime && REGIME[v.regime].tag ? `<div class="rg-tag rg-${v.regime}" title="${esc(REGIME[v.regime].acts)}. ${esc(REGIME[v.regime].words)}">${esc(REGIME[v.regime].name)}</div>` : ""}${rev ? `<div class="rev-tag ${rev.dir > 0 ? "up" : "down"}"${docAttr(rev.doc)}>↺ ${esc(rev.name)} on the ${TF_WORD[tf]}</div>` : ""}
     </button>`;
   }).join("");
 
@@ -634,13 +637,13 @@ function renderReversals() {
       lastStory = st;
       return `${head}<button class="rev-row" ${m.country !== "GLOBAL" ? `data-country="${m.country}"` : ""}>
         <span class="rev-name">${cc(m.country)}${esc(m.name)}<small>${esc(m.country === "GLOBAL" ? m.kind : c.name)}</small></span>
-        <span class="rev-chip ${dir > 0 ? "up" : "down"} k-${r.kind}"${tipAttr(r.doc)}>${esc(r.name)}</span></button>`;
+        <span class="rev-chip ${dir > 0 ? "up" : "down"} k-${r.kind}"${docAttr(r.doc)}>${esc(r.name)}</span></button>`;
     }).join("") + more;
   };
   $("#revUp").innerHTML = col(1);
   $("#revDown").innerHTML = col(-1);
   const turns = all.filter((x) => isTurn(x.r)).length;
-  $("#revMeta").textContent = `${turns} reversing and ${all.length - turns} continuing on the ${TF_WORD[tf]}. Hover a signal for its TheStrat definition.`;
+  $("#revMeta").textContent = `${turns} reversing and ${all.length - turns} continuing on the ${TF_WORD[tf]}. Hover a signal for its definition. Click it to open the TheStrat.ai docs.`;
 }
 
 /* ---------- Render: global pulse (daily breadth) ---------- */
@@ -823,7 +826,7 @@ function openCountry(code, refocus = true) {
       ${sparkSvg(m, tf)}
       <div class="row five">${cells(m, tf)}</div>
       <p>${esc(explain(m.tf[tf], TF_WORD[tf]))}</p>
-      ${rev ? `<p class="dr-rev ${rev.dir > 0 ? "up" : "down"}"><span${tipAttr(rev.doc)}>↺ ${esc(rev.name)}</span> on the ${TF_WORD[tf]}: ${esc(story(rev))}</p>` : ""}
+      ${rev ? `<p class="dr-rev ${rev.dir > 0 ? "up" : "down"}"><span${docAttr(rev.doc)}>↺ ${esc(rev.name)}</span> on the ${TF_WORD[tf]}: ${esc(story(rev))}</p>` : ""}
       ${others.length ? `<p class="dr-also">Also reversing: ${others.map(([t, r]) => `${esc(r.name)} (${TF_WORD[t]})`).join(" · ")}</p>` : ""}
       <div class="seq"><em>LAST 12 DAYS</em>${m.hist.slice(-12).map(([d, s, gg]) => `<i class="${gClass(gg)}" title="${esc(d)}">${S_LABEL[s] ?? "?"}</i>`).join("")}</div></div>`;
   };
@@ -1435,23 +1438,30 @@ function showTip(el) {
   const d = DOCS[el.dataset.tip];
   if (!d) return;
   const tip = $("#tip");
-  tip.innerHTML = `${el.dataset.tipx ? `<span class="tip-x">${esc(el.dataset.tipx)}</span>` : ""}<b>${esc(d.t)}</b><q>${esc(d.q)}</q>${d.note ? `<span class="tip-note">${esc(d.note)}</span>` : ""}<cite>TheStrat docs · <a href="https://thestrat.ai/docs/${esc(d.src)}/" target="_blank" rel="noopener">Read the full definition on thestrat.ai</a></cite>`;
+  tip.innerHTML = `${el.dataset.tipx ? `<span class="tip-x">${esc(el.dataset.tipx)}</span>` : ""}<a class="tip-t" href="${docsUrl(el.dataset.tip)}" target="_blank" rel="noopener"><b>${esc(d.t)}</b></a><q>${esc(d.q)}</q>${d.note ? `<span class="tip-note">${esc(d.note)}</span>` : ""}<cite><a href="${docsUrl(el.dataset.tip)}" target="_blank" rel="noopener">Read the full definition on TheStrat.ai →</a>${el.dataset.doc ? " (or click the label)" : ""}</cite>`;
   tip.hidden = false;
+  tipEl = el;
   const r = el.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
   let x = Math.min(Math.max(8, r.left + r.width / 2 - tw / 2), innerWidth - tw - 8);
   let y = r.bottom + 8;
   if (y + th > innerHeight - 8) y = Math.max(8, r.top - th - 8);
   tip.style.left = `${x}px`; tip.style.top = `${y}px`;
 }
-let tipTimer = 0;
-function hideTip() { clearTimeout(tipTimer); $("#tip").hidden = true; }
-function hideTipSoon() { clearTimeout(tipTimer); tipTimer = setTimeout(hideTip, 250); }
+let tipTimer = 0, switchTimer = 0, tipEl = null;
+function hideTip() { clearTimeout(tipTimer); clearTimeout(switchTimer); $("#tip").hidden = true; tipEl = null; }
+function hideTipSoon() { clearTimeout(tipTimer); tipTimer = setTimeout(hideTip, 350); }
 function wireTips() {
-  // The tooltip stays open while the pointer moves onto it, so its docs link can be clicked.
+  // The tooltip stays open while the pointer moves onto it, so its link can be clicked. On the way there the
+  // pointer often crosses another label: an open tooltip waits a moment before it switches to that label.
   document.addEventListener("mouseover", (e) => {
-    if (e.target.closest("#tip")) { clearTimeout(tipTimer); return; }
+    if (e.target.closest("#tip")) { clearTimeout(tipTimer); clearTimeout(switchTimer); return; }
     const el = e.target.closest("[data-tip]");
-    if (el) { clearTimeout(tipTimer); showTip(el); } else hideTipSoon();
+    if (!el) { clearTimeout(switchTimer); hideTipSoon(); return; }
+    clearTimeout(tipTimer);
+    clearTimeout(switchTimer);
+    if (el === tipEl) return;
+    if ($("#tip").hidden) showTip(el);
+    else switchTimer = setTimeout(() => showTip(el), 260);
   });
   document.addEventListener("focusin", (e) => { const el = e.target.closest("[data-tip]"); el ? showTip(el) : hideTip(); });
   document.addEventListener("scroll", hideTip, { passive: true });
@@ -1505,6 +1515,12 @@ function wireControls() {
   $("#revTfs").addEventListener("click", (e) => { const b = e.target.closest("[data-tf]"); if (b) update({ tf: b.dataset.tf }); });
   $("#reversals").addEventListener("click", (e) => { if (e.target.closest("[data-revall]")) { state.revAll = true; renderReversals(); } });
   document.addEventListener("click", (e) => {
+    const doc = e.target.closest("[data-doc]");
+    if (doc && DOCS[doc.dataset.doc]) {
+      e.preventDefault();
+      window.open(docsUrl(doc.dataset.doc), "_blank", "noopener");
+      return;
+    }
     const t = e.target.closest("[data-country]");
     if (t) openCountry(t.dataset.country);
   });
@@ -1576,7 +1592,7 @@ function renderHow() {
     ["→ Money flow", "CONTROL arcs run from countries where sellers control the bar to countries where buyers do. REVERSALS arcs run from markets reversing down to markets reversing up. They show pressure, not tracked transfers.", candle([20, 50, 45, 25], [35, 80, 40, 75], "var(--accent)")],
     ["↺ Reversal (REV)", "Control flipped. Example 2-1-2 REV: sellers broke the low, price paused inside, then buyers broke the high. CONT = the break goes with the first move.", candle([20, 50, 45, 25], [35, 80, 40, 75], "var(--up)")],
     ["FTFC UP / DN", "Full Timeframe Continuity: price above (UP) or below (DN) the open of the year, quarter, month, week and day.", candle([30, 70, 40, 60], [45, 92, 50, 85], "var(--up)")],
-  ].map(([t, p, svg], i) => `<div class="card"${tipAttr(["2u", "2d", "1", "3", null, "reversal", "ftfc"][i])}>${svg}<div><h3>${t}</h3><p>${p}</p></div></div>`).join("");
+  ].map(([t, p, svg], i) => `<div class="card"${docAttr(["2u", "2d", "1", "3", null, "reversal", "ftfc"][i])}>${svg}<div><h3>${t}</h3><p>${p}</p></div></div>`).join("");
 }
 
 /* ---------- Boot ---------- */
