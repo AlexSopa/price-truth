@@ -22,10 +22,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=JetBrains+Mono:wght@400..600&family=Space+Grotesk:wght@500..700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=13" />
+  <link rel="stylesheet" href="style.css?v=14" />
   <script src="vendor/d3.min.js" defer></script>
   <script src="vendor/topojson-client.min.js" defer></script>
-  <script type="module" src="app.js?v=11"></script>
+  <script type="module" src="app.js?v=12"></script>
 </head>
 <body data-sensor="normal">
   <div class="gate" id="gate" hidden role="dialog" aria-modal="true" aria-labelledby="gateTitle">
@@ -186,6 +186,8 @@
       <p class="disclaim">Education only. Not investment advice. BUY / SELL = who controls the price bar, not a trade recommendation.</p>
       <ul class="insights" id="insights"></ul>
     </aside>
+    <div class="rz rz-col" id="rzSplit" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Width of the map against the report. Left and right arrow keys resize, Enter resets." title="Drag to resize. Double-click to reset."></div>
+    <div class="rz rz-row" id="rzOps" role="separator" aria-orientation="horizontal" tabindex="0" aria-label="Height of the map. Up and down arrow keys resize, Enter resets." title="Drag to resize. Double-click to reset."></div>
   </main>
 
   <section class="panel" id="riskmap">
@@ -249,7 +251,7 @@
   <footer class="foot">
     <p>Personal, non-commercial use only. Education, not investment advice. Price action terms: <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">thestrat.ai/docs</a>. On the public site, your own browser loads the data with your own free key; nothing passes through this site. Run-your-own copies use Yahoo Finance for the owner's personal use. Bars still trading are live and can change until they close. Not affiliated with Yahoo. Inspired by Bilawal Sidhu's <a href="https://github.com/bilawalsidhu/gods-eye-view" target="_blank" rel="noopener">God's Eye View</a>.</p>
     <p id="footData"></p>
-    <p>Keys: D W M Q Y timeframes · S stocks · B bonds · 1 2 3 sensors · G globe / flat · F money flow · + − zoom (or scroll / pinch) · R replay · Esc close.</p>
+    <p>Keys: D W M Q Y timeframes · S stocks · B bonds · 1 2 3 sensors · G globe / flat · F money flow · + − zoom (or scroll / pinch) · R replay · Esc close.<span class="rz-note"> Drag an edge of the map, the country panel or a chart to resize it. Double-click the edge to reset.</span></p>
   </footer>
 
   <div class="tip" id="tip" role="tooltip" hidden></div>
@@ -265,6 +267,7 @@
   </div>
 
   <div class="drawer" id="drawer" hidden>
+    <div class="rz rz-col" id="rzDrawer" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Width of the country panel. Left and right arrow keys resize, Enter resets." title="Drag to resize. Double-click to reset."></div>
     <div class="drawer-card" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
       <button class="close" id="drawerClose" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
       <div id="drawerBody"></div>
