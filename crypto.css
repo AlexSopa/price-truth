@@ -1,0 +1,28 @@
+/* Crypto layer cake. Loaded after style.css: tokens and shared parts come from there. */
+.cake-wrap { min-height: 640px; }
+#cake { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; touch-action: pan-y; }
+#cake:active { cursor: grabbing; }
+#cake.point { cursor: pointer; }
+
+.owner-row[hidden], .check[hidden] { display: none; }
+
+/* Layers, strongest first */
+.layer-list { display: flex; flex-direction: column; }
+.layer-list .ll-k { font: 500 var(--t-sm)/1.4 var(--sans); color: var(--fg-2); margin-bottom: 2px; }
+.rk-row .ll-n { font: 500 11px var(--mono); color: var(--fg-3); letter-spacing: 0.02em; }
+.rk-row .ll-n .up { color: var(--up-text); } .rk-row .ll-n .down { color: var(--down-text); }
+
+/* Layer analysis: one block per tier */
+.layer-block { margin-top: 22px; }
+.layer-block:first-child { margin-top: 4px; }
+.layer-block .rk-group { margin: 0; padding: 0 16px; }
+.layer-block .rk-words { padding: 0 16px; margin: 2px 0 8px; }
+.layer-block .rk-group button { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-align: left; }
+.layer-block .rk-group button:hover { text-decoration: underline; text-underline-offset: 3px; }
+.tile .cc { min-width: 0; }
+.dr-item.hot { border-color: var(--accent); }
+.dr-item .top b .cc { color: var(--fg-2); }
+
+@media (max-width: 900px) {
+  .cake-wrap { min-height: min(640px, 165vw); }
+}

@@ -1,12 +1,16 @@
 // Run-your-own build: fetch daily bars from Yahoo Finance for YOUR personal use, keep only TheStrat labels,
 // write data/signals.json. Run it on your computer (npm run build) or in your own fork's GitHub Actions.
 // Open sessions are kept (the bar in force) and flagged live. No prices are written to the output.
+// `node scripts/build.mjs crypto` builds the crypto layer cake instead: data/crypto.json.
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { MARKETS } from "../universe.js";
 import { buildSignals } from "../signals.js";
 import { parseChart, chartUrl, isLive, localDate } from "../yahoo.js";
 
-const OUT = new URL("../data/signals.json", import.meta.url);
+const CRYPTO = process.argv[2] === "crypto";
+const MARKETS = CRYPTO ? (await import("../crypto-universe.js")).CRYPTO_MARKETS : (await import("../universe.js")).MARKETS;
+const NAME = CRYPTO ? "crypto" : "signals";
+const AXIS_DAYS = CRYPTO ? 366 : 260; // replay axis: coins trade every day of the year
+const OUT = new URL(`../data/${NAME}.json`, import.meta.url);
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const DEADLINE = Date.now() + 20 * 60 * 1000; // stay well inside the 30-minute job limit
@@ -53,7 +57,7 @@ for (const m of MARKETS) {
   await sleep(250);
 }
 const fresh = entries.length;
-const out = buildSignals(entries, "Yahoo Finance (your own copy)");
+const out = buildSignals(entries, "Yahoo Finance (your own copy)", AXIS_DAYS);
 out.failed = failed;
 const order = new Map(MARKETS.map((m, i) => [m.symbol, i]));
 out.markets = [...out.markets, ...stale].sort((a, b) => order.get(a.symbol) - order.get(b.symbol));
@@ -67,8 +71,8 @@ await mkdir(new URL("../data/", import.meta.url), { recursive: true });
 if (process.env.GEV_PASSWORD) {
   // Owner vault: publish only the encrypted file; the plain data never leaves this machine.
   const { seal } = await import("../vault.js");
-  await writeFile(new URL("../data/signals.enc.json", import.meta.url), JSON.stringify(await seal(out, process.env.GEV_PASSWORD)));
-  console.log("wrote data/signals.enc.json (encrypted)");
+  await writeFile(new URL(`../data/${NAME}.enc.json`, import.meta.url), JSON.stringify(await seal(out, process.env.GEV_PASSWORD)));
+  console.log(`wrote data/${NAME}.enc.json (encrypted)`);
 } else {
   await writeFile(OUT, JSON.stringify(out));
 }

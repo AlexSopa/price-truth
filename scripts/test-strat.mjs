@@ -177,3 +177,18 @@ for (const mk of [...MARKETS, ...BYOK_MARKETS]) {
 assert.equal(about({ symbol: "SPY", kind: "index" }).text, about({ symbol: "^GSPC", kind: "index" }).text); // a fund reads as its index
 assert.equal(about({ symbol: "NOPE", kind: "stock" }), null);
 console.log("market context: all tests pass");
+
+// ---- Crypto layer cake: the universe is well formed, and 7-day markets keep Monday weeks ----
+const { LAYERS, CRYPTO_MARKETS } = await import("../crypto-universe.js");
+const layerIds = new Set(LAYERS.map((l) => l.id));
+assert.equal(new Set(CRYPTO_MARKETS.map((mk) => mk.symbol)).size, CRYPTO_MARKETS.length); // no symbol twice
+assert.equal(new Set(CRYPTO_MARKETS.map((mk) => mk.t)).size, CRYPTO_MARKETS.length); // no ticker twice
+for (const mk of CRYPTO_MARKETS) assert.ok(layerIds.has(mk.layer) && mk.t && mk.name, `bad crypto market ${mk.symbol}`);
+for (const l of LAYERS) assert.ok(CRYPTO_MARKETS.filter((mk) => mk.layer === l.id).length >= 5, `layer ${l.id} is too thin`);
+for (const wrong of ["ARB-USD", "TON-USD", "JUP-USD", "STRK-USD", "SKY-USD", "MNT-USD"]) {
+  assert.ok(!CRYPTO_MARKETS.some((mk) => mk.symbol === wrong), `${wrong} is a different coin on Yahoo`);
+}
+const everyDay = Array.from({ length: 28 }, (_, i) => b(new Date(Date.UTC(2026, 8, 1 + i)).toISOString().slice(0, 10), 10, 12, 9, 11));
+assert.equal(sundayWeek(everyDay), false); // coins trade Saturday and Sunday: the week still starts on Monday
+assert.equal(aggregate(everyDay, "W")[1].k, "2026-09-07"); // a Monday
+console.log("crypto layer cake: all tests pass");
