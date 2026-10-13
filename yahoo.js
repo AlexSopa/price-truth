@@ -1,7 +1,8 @@
 // Yahoo Finance chart API helpers. Shared by the build script and the optional browser live mode.
 
-export const chartUrl = (symbol, host = "query1") =>
-  `https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5y&interval=1d`;
+// range: "5y" or "10y" keep daily bars. "max" does not: Yahoo then sends weekly or monthly bars.
+export const chartUrl = (symbol, host = "query1", range = "5y") =>
+  `https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d`;
 
 const fmtCache = new Map();
 export function localDate(t, tz) {

@@ -66,7 +66,16 @@ npm run build:crypto          # fetches Yahoo Finance for your personal use, wri
 
 It has no bring-your-own-key mode yet. The page reads `data/crypto.json` (your own copy) or `data/crypto.enc.json` (owner access: the workflow builds it when `GEV_PASSWORD` is set, and the same passphrase opens it). Without one of these files the page shows a notice only. The globe page links to it in own-copy and owner mode.
 
-Limits: price only (no market value, no dominance); no stablecoins; 5 years of history; the Wall Street tier trades on weekdays only. The workflow runs on weekdays, so on a weekend the owner copy is not refreshed. Yahoo symbols for coins are a trap: see the note at the top of `crypto-universe.js`.
+Two free extras come with the build (`scripts/crypto-extras.mjs`), with no key and no account:
+
+| Extra | Source | What it adds |
+|---|---|---|
+| Stablecoin supply | [DefiLlama](https://defillama.com/stablecoins) | The plate under the cake: the dollars inside crypto, one value a day, read on D / W / M / Q / Y bars. Green = new dollars arrive, red = dollars leave. Tracked money, not price. |
+| Market value shares | [CoinGecko](https://www.coingecko.com/) | Each coin's share of the cake's value, each tier's share, Bitcoin's share of all crypto, and a "by value" bar: every dollar gets one vote, where the counts give every market one vote. |
+
+Each extra is optional. When its source does not answer, the build leaves it out and the page hides that part.
+
+Limits: the arcs show pressure, not tracked transfers; stablecoins have no slice (they are the plate); 10 years of daily history at most; the Wall Street tier trades on weekdays only. The workflow also runs every 3 hours on Saturday and Sunday for the coins. Yahoo symbols for coins are a trap: see the note at the top of `crypto-universe.js`.
 
 ## How it works
 

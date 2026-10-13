@@ -10,6 +10,8 @@ on:
   schedule:
     - cron: "20 * * * 1-5" # hourly on weekdays: every region's bar in force, open sessions included
     - cron: "20 21-23 * * 0" # Sunday evening UTC: New Zealand and Australia open Monday
+    - cron: "20 */3 * * 6" # Saturday, every 3 hours: coins trade every day (crypto layer cake)
+    - cron: "20 0-18/3 * * 0" # Sunday until the evening runs above: coins, and the markets that trade on Sunday
   workflow_dispatch:
 
 permissions:

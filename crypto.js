@@ -143,6 +143,23 @@ const coinVerdict = (st) => {
 };
 
 let tiers = {}; // layer id -> every market of the layer, in universe order (the slices of the tier)
+let cash = null; // the stablecoin supply, shaped like a market: the plate under the cake (absent when the build had none)
+
+// Stablecoin supply is tracked money, not price: its words say dollars arriving or leaving, not buyers or sellers.
+const money = (usd) => (usd >= 1e12 ? `$${(usd / 1e12).toFixed(2)}T` : `$${(usd / 1e9).toFixed(1)}B`);
+const signed = (v) => (v == null ? "–" : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`);
+const cashWord = (score) => (score >= 0.5 ? "ARRIVING" : score <= -0.5 ? "LEAVING" : score > 0 ? "LEANING IN" : score < 0 ? "LEANING OUT" : "FLAT");
+function cashExplain(st, word) {
+  if (!st) return "Not enough history yet.";
+  const { s, g } = st;
+  if (s === "1") return `Supply is inside last ${word}'s range. No clear flow of new dollars.`;
+  if (s === "3") return `Supply broke both sides of last ${word}'s range. It ends ${g > 0 ? "higher" : g < 0 ? "lower" : "flat"} so far.`;
+  if (s === "2u") return g >= 0 ? `Supply rose above last ${word}'s high. New dollars are arriving in crypto.` : `Supply went above last ${word}'s high, then fell back. The inflow is fading.`;
+  return g <= 0 ? `Supply fell below last ${word}'s low. Dollars are leaving crypto.` : `Supply went below last ${word}'s low, then recovered. The outflow is fading.`;
+}
+// A market's share of the market value of the coins on the cake (0 to 1), or undefined (funds, stocks, no data).
+const shareOf = (m) => state.data.value?.share?.[m.symbol];
+const pctTxt = (f) => (f >= 0.1 ? `${Math.round(f * 100)}%` : f >= 0.001 ? `${(f * 100).toFixed(1)}%` : "<0.1%");
 
 // One view per layer: its markets on this timeframe and the mean of their control scores.
 function buildViews(tf) {
@@ -244,14 +261,46 @@ function renderIntel() {
   $("#tugBtc").style.background = bs >= 0 ? "var(--up)" : "var(--down)";
   $("#tugAlt").style.background = as >= 0 ? "var(--up)" : "var(--down)";
   $("#tugVerdict").textContent = Math.abs(gap) < 0.15 ? "Dead even" : gap > 0 ? "← Money favors Bitcoin" : "Money favors altcoins →";
-  $("#tugBtcTxt").textContent = btc ? `BTC ${S_LABEL[btc.s]} · ${control(btc).label}` : "BTC –";
+  const dom = state.data.value?.btcDom;
+  $("#tugBtcTxt").textContent = `${btc ? `BTC ${S_LABEL[btc.s]} · ${control(btc).label}` : "BTC –"}${dom ? ` · ${dom}% OF ALL CRYPTO VALUE` : ""}`;
+
+  // By value: how much of the coins' market value sits where buyers control the bar, and where sellers do.
+  // The counts above give every market one vote; this gives every dollar one vote.
+  const valued = state.data.markets.filter((m) => shareOf(m) && m.tf[tf]);
+  $("#valueTug").hidden = !valued.length;
+  if (valued.length) {
+    const all = valued.reduce((a, m) => a + shareOf(m), 0);
+    const part = (test) => valued.filter((m) => test(control(m.tf[tf]).score)).reduce((a, m) => a + shareOf(m), 0) / all;
+    const buy = part((s) => s >= 0.5), sell = part((s) => s <= -0.5);
+    $("#valSell").style.width = `${sell * 100}%`;
+    $("#valNone").style.width = `${(1 - sell - buy) * 100}%`;
+    $("#valBuy").style.width = `${buy * 100}%`;
+    $("#valVerdict").textContent = "By value";
+    $("#valSellTxt").textContent = `SELLERS CONTROL ${Math.round(sell * 100)}% OF COIN VALUE`;
+    $("#valBuyTxt").textContent = `BUYERS ${Math.round(buy * 100)}%`;
+  }
+
+  // Dollars in crypto: the stablecoin supply (the plate under the cake).
+  $("#cash").hidden = !cash;
+  if (cash) {
+    const st = cash.tf[tf], sc = st ? control(st).score : 0;
+    const say = sc >= 0.5 ? "New dollars are arriving" : sc <= -0.5 ? "Dollars are leaving" : "No clear flow of dollars";
+    const c = cash.chg ?? {};
+    $("#cash").className = `mine ${sc >= 0.5 ? "buy" : sc <= -0.5 ? "sell" : ""}`;
+    $("#cash").innerHTML = `<span class="mine-k">Dollars in crypto: stablecoin supply ${money(cash.usd)}</span>
+      <b>${say} ${when}.</b>
+      <span>7 days ${signed(c.w)} · 30 days ${signed(c.m)} · 90 days ${signed(c.q)} · 1 year ${signed(c.y)}. Tracked money, not price. See inside →</span>`;
+  }
   $("#tugAltTxt").textContent = `▲${alts.filter((m) => m.tf[tf].s === "2u").length} ▼${alts.filter((m) => m.tf[tf].s === "2d").length} of ${alts.length}`;
 
   // Layers, strongest first: the relative picture, also when every layer is on the same side.
   const ranked = [...views].sort((a, b) => b.score - a.score);
-  $("#layerList").innerHTML = `<div class="ll-k">Layers, strongest first on the ${TF_WORD[tf]}</div>` + ranked.map((v) =>
-    `<button class="rk-row" data-layer="${v.id}"><span class="rk-name">${esc(v.name)}</span>
-      <span class="rk-acts"><span class="ll-n"><span class="up">▲${v.up}</span> <span class="down">▼${v.down}</span> of ${v.members.length}</span><span class="verdict ${vClass(v.verdict)}">${esc(v.verdict)}</span></span></button>`).join("");
+  const layerShare = (v) => (tiers[v.id] ?? []).reduce((a, m) => a + (shareOf(m) ?? 0), 0);
+  $("#layerList").innerHTML = `<div class="ll-k">Layers, strongest first on the ${TF_WORD[tf]}</div>` + ranked.map((v) => {
+    const sh = layerShare(v);
+    return `<button class="rk-row" data-layer="${v.id}"><span class="rk-name">${esc(v.name)}${sh ? `<small class="ll-v">${pctTxt(sh)} of coin value</small>` : ""}</span>
+      <span class="rk-acts"><span class="ll-n"><span class="up">▲${v.up}</span> <span class="down">▼${v.down}</span> of ${v.members.length}</span><span class="verdict ${vClass(v.verdict)}">${esc(v.verdict)}</span></span></button>`;
+  }).join("");
 
   $("#insights").innerHTML = insights().map((t) => `<li>${t}</li>`).join("");
 
@@ -288,12 +337,12 @@ function insights() {
 
 /* ---------- Render: layer tiles ---------- */
 
-function cells(m, selTf) {
+function cells(m, selTf, say = explain) {
   return TIMEFRAMES.map((t) => {
     const st = m?.tf[t];
     if (!st) return `<span class="cell none"><small>${t}</small>–</span>`;
     const rev = reversal(st);
-    const extra = `${m.name} · ${TF_WORD[t]}: ${explain(st, TF_WORD[t])}${rev ? ` Signal: ${rev.name}.` : ""}`;
+    const extra = `${m.name} · ${TF_WORD[t]}: ${say(st, TF_WORD[t])}${rev ? ` Signal: ${rev.name}.` : ""}`;
     return `<span class="cell ${gClass(st.g)} s-${esc(st.s)}${t === selTf ? " sel" : ""}${rev ? " rev" : ""}"${tipAttr(st.s, extra)}><small>${t}</small>${S_LABEL[st.s] ?? "?"}</span>`;
   }).join("");
 }
@@ -382,10 +431,12 @@ function buildReplay(tf, step, days) {
       if (last.s === "2d") f.down++;
     }
   }
-  return frames.map((f) => {
+  const cashLine = cash?.tl?.[tf];
+  return frames.map((f, k) => {
     const layer = {}, rev = {};
     for (const id in f.sum) { layer[id] = f.sum[id] / f.cnt[id]; rev[id] = f.rsum[id] / f.cnt[id]; }
-    return { d: f.d, scores: f.scores, st: f.st, layer, rev, up: f.up, down: f.down };
+    const cs = cashLine && decodeState(cashLine[idx[k]]);
+    return { d: f.d, scores: f.scores, st: f.st, layer, rev, up: f.up, down: f.down, cash: cs ? control(cs).score : undefined };
   });
 }
 
@@ -532,7 +583,7 @@ function openLayer(id, sym = null, refocus = true) {
   const item = (m) => {
     const rev = reversal(m.tf[tf]);
     const others = TIMEFRAMES.filter((t) => t !== tf).map((t) => [t, reversal(m.tf[t])]).filter(([, r]) => r);
-    return `<div class="dr-item${m.symbol === sym ? " hot" : ""}" data-sym="${esc(m.symbol)}"><div class="top"><b>${tk(m)}${esc(m.name)}</b><span>${esc(m.symbol)} · ${m.live ? '<em class="live">● LIVE BAR</em>' : `LAST BAR ${esc(m.asOf)}`}${m.stale ? " · DATA DELAYED" : ""}</span></div>
+    return `<div class="dr-item${m.symbol === sym ? " hot" : ""}" data-sym="${esc(m.symbol)}"><div class="top"><b>${tk(m)}${esc(m.name)}</b><span>${esc(m.symbol)}${shareOf(m) ? ` · ${pctTxt(shareOf(m))} OF COIN VALUE` : ""} · ${m.live ? '<em class="live">● LIVE BAR</em>' : `LAST BAR ${esc(m.asOf)}`}${m.stale ? " · DATA DELAYED" : ""}</span></div>
       ${sparkSvg(m, tf)}
       <div class="row five">${cells(m, tf)}</div>
       <p>${esc(explain(m.tf[tf], TF_WORD[tf]))}</p>
@@ -551,6 +602,30 @@ function openLayer(id, sym = null, refocus = true) {
   if (wasHidden) $("#drawerClose").focus();
   if (sym && refocus) $("#drawerBody .dr-item.hot")?.scrollIntoView({ block: "center" });
   writeHash();
+}
+// The plate: the stablecoin supply, read with the same bars.
+function openCash() {
+  if (!cash) return;
+  const { tf } = state;
+  const c = cash.chg ?? {};
+  state.focus = "cash";
+  state.focusSym = null;
+  $("#drawerBody").innerHTML = `<div class="dr-kicker">The plate under the cake, ${TF_WORD[tf]} bars.</div>
+    <h3 id="drawerTitle">Dollars in crypto</h3>
+    <p class="dr-say">Stablecoins are crypto dollars (USDT, USDC and others). Their total supply rises when new money comes into crypto and falls when money goes out. This is tracked money, not price pressure.</p>
+    <div class="dr-group"><div class="dr-item"><div class="top"><b>Stablecoin supply</b><span>${money(cash.usd)} · LAST VALUE ${esc(cash.asOf)} · SOURCE ${esc(cash.source ?? "")}</span></div>
+      ${sparkSvg(cash, tf)}
+      <div class="row five">${cells(cash, tf, cashExplain)}</div>
+      <p>${esc(cashExplain(cash.tf[tf], TF_WORD[tf]))}</p>
+      <p class="dr-also">Change: 7 days ${signed(c.w)} · 30 days ${signed(c.m)} · 90 days ${signed(c.q)} · 1 year ${signed(c.y)}</p>
+      <div class="seq"><em>LAST 12 DAYS</em>${cash.hist.slice(-12).map(([d, s, gg]) => `<i class="${gClass(gg)}" title="${esc(d)}">${S_LABEL[s] ?? "?"}</i>`).join("")}</div></div></div>
+    <p class="dr-also">How the bars are made: the supply has one value a day. A day's bar runs from the value of the day before to the value of that day. Week, month, quarter and year bars are made from those days, so 2U means the supply went above the high of the last bar.</p>
+    <p class="disclaim">Education only. Not investment advice.</p>`;
+  const wasHidden = $("#drawer").hidden;
+  if (wasHidden) lastFocus = document.activeElement;
+  $("#drawer").hidden = false;
+  if (wasHidden) $("#drawerClose").focus();
+  cake?.redraw();
 }
 let lastFocus = null;
 function closeDrawer() {
@@ -688,10 +763,37 @@ function initCake() {
     ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(0, 0, S * 1.5, 0, TAU); ctx.fill();
     ctx.restore();
     ctx.beginPath(); ctx.ellipse(cx, g0.cyB + 5, S * 1.13, S * 1.13 * sp, 0, 0, TAU); ctx.fillStyle = P.line; ctx.fill();
-    ctx.beginPath(); ctx.ellipse(cx, g0.cyB, S * 1.13, S * 1.13 * sp, 0, 0, TAU); ctx.fillStyle = P.land; ctx.fill();
-    ctx.strokeStyle = P.line; ctx.lineWidth = 1; ctx.stroke();
+    // The plate is the stablecoin supply: tinted green when new dollars arrive in crypto, red when they leave.
+    const cs = !cash ? undefined : state.frame ? state.frame.cash : cash.tf[state.tf] ? control(cash.tf[state.tf]).score : undefined;
+    const plateHot = state.hover?.layer === "cash" || state.focus === "cash";
+    ctx.beginPath(); ctx.ellipse(cx, g0.cyB, S * 1.13, S * 1.13 * sp, 0, 0, TAU);
+    ctx.fillStyle = cs === undefined ? P.land : d3.interpolateRgb(P.land, heat(cs))(0.6); ctx.fill();
+    ctx.strokeStyle = plateHot ? P.text : P.line; ctx.lineWidth = plateHot ? 1.6 : 1; ctx.stroke();
 
     labelBoxes = [];
+    if (cash) {
+      const lx = cx - S * 1.13 - (narrow ? 8 : 14), ly = g0.cyB + (narrow ? 10 : 14);
+      const word = cs === undefined ? "" : cashWord(cs);
+      ctx.textAlign = "right"; ctx.textBaseline = "middle";
+      ctx.font = `600 ${narrow ? 10 : 11}px 'JetBrains Mono', monospace`;
+      ctx.fillStyle = plateHot ? P.text : d3.color(P.text).copy({ opacity: 0.85 }).formatRgb();
+      const name = narrow ? "CASH" : "DOLLARS IN CRYPTO";
+      ctx.fillText(name, lx, narrow ? ly : ly - 6);
+      let wide = ctx.measureText(name).width;
+      if (narrow) {
+        if (cs >= 0.5 || cs <= -0.5) { ctx.beginPath(); ctx.arc(lx + 7, ly, 2.6, 0, TAU); ctx.fillStyle = heat(cs >= 0.5 ? 1 : -1); ctx.fill(); }
+      } else {
+        ctx.font = "500 9.5px 'JetBrains Mono', monospace";
+        const tail = state.frame ? "" : ` ${money(cash.usd)}`;
+        ctx.fillStyle = mute;
+        ctx.fillText(tail, lx, ly + 7);
+        const tw = ctx.measureText(tail).width;
+        ctx.fillStyle = cs >= 0.5 ? heat(1) : cs <= -0.5 ? heat(-1) : mute;
+        ctx.fillText(word, lx - tw, ly + 7);
+        wide = Math.max(wide, tw + ctx.measureText(word).width);
+      }
+      labelBoxes.push({ id: "cash", x0: lx - wide - 4, x1: lx + 10, y0: ly - 14, y1: ly + 14 });
+    }
     // Bottom tier first: each tier is smaller than the one under it, so it only covers that tier's top face.
     for (let i = 0; i < N; i++) {
       const L = LAYERS[i], coins = tiers[L.id] ?? [], n = coins.length;
@@ -867,11 +969,16 @@ function initCake() {
     canvas.classList.toggle("point", !!hv);
     const tf = state.tf;
     if (!hv) { $("#hudTarget").innerHTML = ""; return; }
+    if (hv.layer === "cash") {
+      const st = cash.tf[tf], sc = st ? control(st).score : 0;
+      $("#hudTarget").innerHTML = `<b>Dollars in crypto · ${money(cash.usd)}</b><span class="${sc >= 0.5 ? "v-buy" : sc <= -0.5 ? "v-sell" : ""}">${cashWord(sc)}</span><br>STABLECOIN SUPPLY · ${S_LABEL[st?.s] ?? "–"} · ${TF_HUD[tf]}`;
+      return;
+    }
     const L = LAYER.get(hv.layer), v = state.views[hv.layer];
     const m = hv.sym && state.data.markets.find((x) => x.symbol === hv.sym);
     if (m) {
       const st = m.tf[tf], c = st && control(st);
-      $("#hudTarget").innerHTML = `<b>${esc(m.t)} · ${esc(m.name)}</b><span class="${c?.score >= 0.5 ? "v-buy" : c?.score <= -0.5 ? "v-sell" : ""}">${esc(c?.label ?? "NO DATA")}</span><br>${esc(L.name)} · ${S_LABEL[st?.s] ?? "–"} · ${TF_HUD[tf]}`;
+      $("#hudTarget").innerHTML = `<b>${esc(m.t)} · ${esc(m.name)}</b><span class="${c?.score >= 0.5 ? "v-buy" : c?.score <= -0.5 ? "v-sell" : ""}">${esc(c?.label ?? "NO DATA")}</span><br>${esc(L.name)} · ${S_LABEL[st?.s] ?? "–"} · ${TF_HUD[tf]}${shareOf(m) ? ` · ${pctTxt(shareOf(m))} OF COIN VALUE` : ""}`;
     } else {
       $("#hudTarget").innerHTML = `<b>${esc(L.name)}</b>${v ? `<span class="v-${vClass(v.verdict)}">${esc(v.verdict)}</span><br>▲${v.up} ▼${v.down} OF ${v.members.length} · ${TF_HUD[tf]}` : ""}`;
     }
@@ -903,7 +1010,8 @@ function initCake() {
   canvas.addEventListener("click", (e) => {
     if (moved > 6) return; // the end of a drag
     const hv = at(e);
-    if (hv) openLayer(hv.layer, hv.sym ?? null);
+    if (hv?.layer === "cash") openCash();
+    else if (hv) openLayer(hv.layer, hv.sym ?? null);
   });
 
   return {
@@ -976,7 +1084,7 @@ function setPressed(segId, v) {
 }
 
 function writeHash() {
-  history.replaceState(null, "", `${location.pathname}${location.search}#tf=${state.tf}&sensor=${state.sensor}&flow=${state.flow}${state.focus ? `&l=${state.focus}` : ""}`);
+  history.replaceState(null, "", `${location.pathname}${location.search}#tf=${state.tf}&sensor=${state.sensor}&flow=${state.flow}${state.focus && state.focus !== "cash" ? `&l=${state.focus}` : ""}`);
 }
 function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
@@ -999,7 +1107,8 @@ function update(patch = {}) {
   $("#flowHint").textContent = state.flow === "reversal" ? "ARCS: LAYERS REVERSING DOWN → REVERSING UP" : state.flow === "control" ? "ARCS: OUT OF SELLERS' LAYERS → INTO BUYERS' LAYERS" : "";
   renderLegend(); renderIntel(); renderLayers(); renderReversals(); renderReplayControls();
   cake?.redraw();
-  if (state.focus && !$("#drawer").hidden) openLayer(state.focus, state.focusSym, false);
+  if (state.focus === "cash" && !$("#drawer").hidden) openCash();
+  else if (state.focus && !$("#drawer").hidden) openLayer(state.focus, state.focusSym, false);
   else writeHash();
 }
 
@@ -1017,6 +1126,7 @@ function wireControls() {
       window.open(docsUrl(doc.dataset.doc), "_blank", "noopener");
       return;
     }
+    if (e.target.closest("#cash")) { openCash(); return; }
     const coin = e.target.closest("[data-coin]");
     if (coin) { openCoin(coin.dataset.coin); return; }
     const layer = e.target.closest("[data-layer]");
@@ -1073,13 +1183,14 @@ function renderHeader() {
   const ageDays = (Date.now() - new Date(d.generatedAt)) / 864e5;
   $("#asof").textContent = `${ageDays > 2 ? "DATA DELAYED · " : ""}UPDATED ${d.generatedAt.slice(0, 10)} ${d.generatedAt.slice(11, 16)} UTC${liveN ? ` · ${liveN} ${liveN === 1 ? "MARKET" : "MARKETS"} LIVE` : ""}`;
   $("#tracking").innerHTML = `TRACKING <b>${LAYERS.filter((L) => tiers[L.id]?.length).length}</b> LAYERS · <b>${d.markets.length}</b> MARKETS · <b>5</b> TIMEFRAMES`;
-  $("#footData").textContent = `Data: ${d.source}. Generated ${d.generatedAt}.${d.failed?.length ? ` Not loaded: ${d.failed.join(", ")}.` : ""}`;
+  $("#footData").textContent = `Data: ${d.source}. Generated ${d.generatedAt}.${d.failed?.length ? ` Not loaded: ${d.failed.join(", ")}.` : ""}${d.stable ? ` Stablecoin supply: ${d.stable.source}.` : ""}${d.value ? ` Market value shares: data provided by ${d.value.source}${d.value.cover ? `; the coins on the cake hold ${d.value.cover}% of all crypto value` : ""}.` : ""}`;
 }
 
 function applyData(data) {
   state.data = data;
   tiers = {};
   for (const m of data.markets) if (LAYER.has(m.layer)) (tiers[m.layer] ??= []).push(m);
+  cash = data.stable?.tf ? { symbol: "STABLECOINS", t: "USD", name: "Stablecoin supply", live: false, ...data.stable } : null;
   renderHeader();
   wireControls();
   renderHow();
