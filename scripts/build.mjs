@@ -10,6 +10,7 @@ const CRYPTO = process.argv[2] === "crypto";
 const MARKETS = CRYPTO ? (await import("../crypto-universe.js")).CRYPTO_MARKETS : (await import("../universe.js")).MARKETS;
 const NAME = CRYPTO ? "crypto" : "signals";
 const AXIS_DAYS = CRYPTO ? 366 : 260; // replay axis: coins trade every day of the year
+const RANGE = CRYPTO ? "10y" : "5y"; // coins: more yearly bars (Bitcoin has daily bars for all 10 years)
 const OUT = new URL(`../data/${NAME}.json`, import.meta.url);
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -22,7 +23,7 @@ async function fetchChart(symbol) {
     if (Date.now() > DEADLINE || blocked >= 3) return null;
     let wait = 1500 * (attempt + 1);
     try {
-      const r = await fetch(chartUrl(symbol, attempt % 2 ? "query2" : "query1"), {
+      const r = await fetch(chartUrl(symbol, attempt % 2 ? "query2" : "query1", RANGE), {
         headers: { "User-Agent": UA, Accept: "application/json" },
         signal: AbortSignal.timeout(15000),
       });
@@ -66,6 +67,14 @@ console.log(`fresh: ${fresh}/${MARKETS.length}  live now: ${out.markets.filter((
 if (fresh < MARKETS.length * 0.8) {
   console.error("Too many markets failed. Keeping the previous data file.");
   process.exit(1);
+}
+if (CRYPTO) {
+  // Free extras: stablecoin supply and market value shares. Each is optional.
+  const { stablecoins, marketValue } = await import("./crypto-extras.mjs");
+  const stable = await stablecoins(out.axis), value = await marketValue(MARKETS);
+  if (stable) out.stable = stable;
+  if (value) out.value = value;
+  console.log(`extras: stablecoin supply ${stable ? "ok" : "MISSING"}  market value ${value ? "ok" : "MISSING"}`);
 }
 await mkdir(new URL("../data/", import.meta.url), { recursive: true });
 if (process.env.GEV_PASSWORD) {

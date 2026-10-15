@@ -115,3 +115,22 @@ export const CRYPTO_MARKETS = [
   c("RIOT", "RIOT", "Riot Platforms", "wall", "stock"),
   c("CLSK", "CLSK", "CleanSpark", "wall", "stock"),
 ];
+
+// CoinGecko id of each coin, for its market value (scripts/crypto-extras.mjs). Each id was checked against the
+// name CoinGecko returns (2026-10-12). Funds and stocks have none: the value shares are for coins only.
+// Maker returns no market value now (its holders moved to the Sky token), so it has no share.
+export const GECKO = {
+  "BTC-USD": "bitcoin", "XRP-USD": "ripple", "LTC-USD": "litecoin", "BCH-USD": "bitcoin-cash", "XLM-USD": "stellar", "XMR-USD": "monero", "ZEC-USD": "zcash",
+  "ETH-USD": "ethereum", "SOL-USD": "solana", "BNB-USD": "binancecoin", "ADA-USD": "cardano", "TRX-USD": "tron", "AVAX-USD": "avalanche-2", "SUI20947-USD": "sui",
+  "DOT-USD": "polkadot", "NEAR-USD": "near", "APT21794-USD": "aptos", "ATOM-USD": "cosmos", "HBAR-USD": "hedera-hashgraph", "ICP-USD": "internet-computer",
+  "INJ-USD": "injective-protocol", "SEI-USD": "sei-network", "TIA-USD": "celestia", "KAS-USD": "kaspa",
+  "ARB11841-USD": "arbitrum", "OP-USD": "optimism", "POL28321-USD": "polygon-ecosystem-token", "MNT27075-USD": "mantle", "STX4847-USD": "blockstack",
+  "IMX10603-USD": "immutable-x", "STRK22691-USD": "starknet", "ZK24091-USD": "zksync",
+  "LINK-USD": "chainlink", "TAO22974-USD": "bittensor", "RENDER-USD": "render-token", "FET-USD": "fetch-ai", "FIL-USD": "filecoin", "GRT6719-USD": "the-graph",
+  "AR-USD": "arweave", "PYTH-USD": "pyth-network", "QNT-USD": "quant-network", "HNT-USD": "helium", "AKT-USD": "akash-network",
+  "HYPE32196-USD": "hyperliquid", "UNI7083-USD": "uniswap", "AAVE-USD": "aave", "MKR-USD": "maker", "LDO-USD": "lido-dao", "ENA-USD": "ethena", "ONDO-USD": "ondo-finance",
+  "JUP29210-USD": "jupiter-exchange-solana", "PENDLE-USD": "pendle", "CRV-USD": "curve-dao-token", "COMP5692-USD": "compound-governance-token", "SNX-USD": "havven",
+  "RAY-USD": "raydium", "CAKE-USD": "pancakeswap-token",
+  "DOGE-USD": "dogecoin", "SHIB-USD": "shiba-inu", "PEPE24478-USD": "pepe", "TRUMP35336-USD": "official-trump", "BONK-USD": "bonk", "WIF-USD": "dogwifcoin",
+  "FLOKI-USD": "floki", "FARTCOIN-USD": "fartcoin", "PENGU34466-USD": "pudgy-penguins", "SAND-USD": "the-sandbox", "MANA-USD": "decentraland", "AXS-USD": "axie-infinity",
+};

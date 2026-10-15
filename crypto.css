@@ -12,6 +12,12 @@
 .rk-row .ll-n { font: 500 11px var(--mono); color: var(--fg-3); letter-spacing: 0.02em; }
 .rk-row .ll-n .up { color: var(--up-text); } .rk-row .ll-n .down { color: var(--down-text); }
 
+.rk-name .ll-v { margin-left: 8px; font: 400 12px var(--sans); color: var(--fg-3); }
+
+/* By value: sellers | nobody | buyers, by the coins' market value */
+.value-tug[hidden], .mine[hidden] { display: none; }
+.value-tug #valSell { background: var(--down); } .value-tug #valBuy { background: var(--up); } .value-tug #valNone { background: var(--panel-3); }
+
 /* Layer analysis: one block per tier */
 .layer-block { margin-top: 22px; }
 .layer-block:first-child { margin-top: 4px; }

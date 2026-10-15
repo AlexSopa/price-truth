@@ -12,9 +12,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=JetBrains+Mono:wght@400..600&family=Space+Grotesk:wght@500..700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css?v=16" />
-  <link rel="stylesheet" href="crypto.css?v=1" />
+  <link rel="stylesheet" href="crypto.css?v=2" />
   <script src="vendor/d3.min.js" defer></script>
-  <script type="module" src="crypto.js?v=1"></script>
+  <script type="module" src="crypto.js?v=2"></script>
 </head>
 <body data-sensor="normal">
   <div class="gate" id="gate" hidden role="dialog" aria-modal="true" aria-labelledby="gateTitle">
@@ -49,11 +49,11 @@
     <span class="b-brand">GOD'S EYE VIEW · CRYPTO</span>
     <span id="srcTag">SOURCE: OWNER DATA</span>
     <span id="asof">ACQUIRING…</span>
-    <a href="./">World globe <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
     <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">Learn TheStrat at TheStrat.ai <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
   </div>
 
   <header class="bar">
+    <nav class="seg page-seg" aria-label="Page"><a href="./">Globe</a><a href="crypto.html" aria-current="page">Crypto</a></nav>
     <div class="brand">
       <svg class="eye" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13"/><circle cx="16" cy="16" r="5" class="pupil"/></svg>
       <span class="wordmark">Crypto Layer Cake</span>
@@ -101,11 +101,17 @@
       <h1 id="headline">Acquiring signal…</h1>
       <p id="subline" class="subline"></p>
       <div class="counts" id="counts"></div>
+      <div class="tug value-tug" id="valueTug" hidden>
+        <div class="tug-head"><span>SELLERS</span><span id="valVerdict">By value</span><span>BUYERS</span></div>
+        <div class="tug-bar"><i id="valSell"></i><i id="valNone"></i><i id="valBuy"></i></div>
+        <div class="tug-foot"><span id="valSellTxt"></span><span id="valBuyTxt"></span></div>
+      </div>
       <div class="tug">
         <div class="tug-head"><span>BITCOIN</span><span id="tugVerdict"></span><span>ALTCOINS</span></div>
         <div class="tug-bar"><i id="tugBtc"></i><i id="tugAlt"></i></div>
         <div class="tug-foot"><span id="tugBtcTxt"></span><span id="tugAltTxt"></span></div>
       </div>
+      <button class="mine" id="cash" type="button" hidden></button>
       <div class="layer-list" id="layerList"></div>
       <p class="disclaim">Education only. Not investment advice. BUY / SELL = who controls the price bar, not a trade recommendation.</p>
       <ul class="insights" id="insights"></ul>
@@ -134,10 +140,11 @@
 
   <section class="panel explain">
     <div class="panel-head"><h2>How to read this</h2><span class="panel-meta">Full definitions at <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">thestrat.ai/docs</a>.</span></div>
-    <p class="lead">The cake is the crypto market. Each tier is one layer of crypto, from <b>base money</b> at the bottom to <b>Wall Street</b> at the top. Each slice of a tier is one market. Its color shows who controls the price bar: <b>green = buyers, red = sellers</b>, dark = nobody yet. The arcs on the right show rotation: out of the layers where sellers are in control, into the layers where buyers are.</p>
+    <p class="lead">The cake is the crypto market. Each tier is one layer of crypto, from <b>base money</b> at the bottom to <b>Wall Street</b> at the top. Each slice of a tier is one market. Its color shows who controls the price bar: <b>green = buyers, red = sellers</b>, dark = nobody yet. The arcs on the right show rotation: out of the layers where sellers are in control, into the layers where buyers are. The <b>plate</b> under the cake is the supply of stablecoins, the dollars inside crypto: green when new dollars arrive, red when dollars leave.</p>
     <div class="cards" id="howCards"></div>
     <p class="fine" id="layerNotes"></p>
-    <p class="fine">Limits. The data is price only: it has no market value and no dominance figures, so the arcs show which side is pushing price, not money that physically moves. Every trade has a buyer and a seller. Stablecoins are left out, because their price stays at 1.00. The price history goes back 5 years, so a coin that started in 2024 or 2025 has only 2 or 3 yearly bars. Coins trade every day; the Wall Street tier trades on weekdays only, so on a weekend it shows Friday's bar. Bars still trading are live and can change until they close.</p>
+    <p class="fine">Two figures are not price. The stablecoin supply (the plate) is tracked money: one value a day from DefiLlama, made into bars the same way as price. The market value shares come from CoinGecko at the time of the last update: "by value" gives every dollar one vote, where the counts give every market one vote. The shares are for coins only, not for the Wall Street tier.</p>
+    <p class="fine">Limits. The arcs show which side is pushing price, not money that physically moves. Every trade has a buyer and a seller. Stablecoins have no slice, because their price stays at 1.00; they are the plate. The price history goes back 10 years at most, so a coin that started in 2024 or 2025 has only 2 or 3 yearly bars. Coins trade every day; the Wall Street tier trades on weekdays only, so on a weekend it shows Friday's bar. Bars still trading are live and can change until they close.</p>
   </section>
 
   <footer class="foot">

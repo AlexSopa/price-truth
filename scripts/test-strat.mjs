@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { scenario, aggregate, analyze, control, continuity, sundayWeek, reversal, spark, timeline, decodeState, encodeState, periodKey, lastState } from "../strat.js";
-import { parseChart, isLive } from "../yahoo.js";
+import { parseChart, isLive, chartUrl } from "../yahoo.js";
 
 const b = (d, o, h, l, c) => ({ d, o, h, l, c });
 
@@ -191,4 +191,20 @@ for (const wrong of ["ARB-USD", "TON-USD", "JUP-USD", "STRK-USD", "SKY-USD", "MN
 const everyDay = Array.from({ length: 28 }, (_, i) => b(new Date(Date.UTC(2026, 8, 1 + i)).toISOString().slice(0, 10), 10, 12, 9, 11));
 assert.equal(sundayWeek(everyDay), false); // coins trade Saturday and Sunday: the week still starts on Monday
 assert.equal(aggregate(everyDay, "W")[1].k, "2026-09-07"); // a Monday
+// Free extras: a series with one value a day becomes bars that join end to end; every coin with an id is on the cake.
+const { valueBars } = await import("./crypto-extras.mjs");
+const { GECKO } = await import("../crypto-universe.js");
+const supply = Array.from({ length: 21 }, (_, i) => ({ d: new Date(Date.UTC(2026, 8, 7 + i)).toISOString().slice(0, 10), v: 100 + i })); // rises every day
+const sb = valueBars(supply);
+assert.equal(sb.length, 20);
+assert.deepEqual(sb[0], { d: "2026-09-08", o: 100, h: 101, l: 100, c: 101 }); // open = the value of the day before
+assert.equal(sb[5].o, sb[4].c);
+const sw = analyze(sb).tf.W;
+assert.equal(sw.s, "2u"); // a supply that rises goes above last week's high: new dollars arriving
+assert.equal(sw.g, 1);
+assert.equal(analyze(valueBars(supply.map((p) => ({ ...p, v: 200 - p.v })))).tf.W.s, "2d"); // a supply that falls: dollars leaving
+for (const sym of Object.keys(GECKO)) assert.ok(CRYPTO_MARKETS.some((mk) => mk.symbol === sym && mk.kind === "coin"), `${sym} has a value id but is not a coin on the cake`);
+for (const mk of CRYPTO_MARKETS.filter((x) => x.kind === "coin")) assert.ok(GECKO[mk.symbol], `no value id for ${mk.symbol}`);
+assert.match(chartUrl("BTC-USD", "query1", "10y"), /range=10y&interval=1d/);
+assert.match(chartUrl("^GSPC"), /range=5y&interval=1d/); // the globe keeps 5 years
 console.log("crypto layer cake: all tests pass");
