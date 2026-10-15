@@ -64,7 +64,7 @@ A slice is green when buyers control the bar and red when sellers do. The arcs o
 npm run build:crypto          # fetches Yahoo Finance for your personal use, writes data/crypto.json
 ```
 
-It has no bring-your-own-key mode yet. The page reads `data/crypto.json` (your own copy) or `data/crypto.enc.json` (owner access: the workflow builds it when `GEV_PASSWORD` is set, and the same passphrase opens it). Without one of these files the page shows a notice only. The globe page links to it in own-copy and owner mode.
+It has no bring-your-own-key mode yet. The page reads `data/crypto.json` (your own copy) or `data/crypto.enc.json` (owner access: the workflow builds it when `GEV_PASSWORD` is set, and the same passphrase opens it). Without one of these files the page shows a notice only. A Globe | Crypto toggle at the top left switches between the two pages. On the globe it shows in own-copy and owner mode.
 
 Two free extras come with the build (`scripts/crypto-extras.mjs`), with no key and no account:
 

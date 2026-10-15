@@ -1913,7 +1913,7 @@ async function main() {
     bootLine(`> CLASSIFYING ${own.markets.length * TIMEFRAMES.length} PRICE BARS [1 · 2U · 2D · 3] .. OK`);
     bootLine("> GOD'S EYE VIEW ONLINE.");
     $("#srcTag").textContent = "SOURCE: YOUR OWN COPY";
-    $("#cakeLink").hidden = false; // the crypto layer cake reads the copy's own data too
+    $("#pageSeg").hidden = false; // the crypto layer cake reads the copy's own data too
     applyData(own);
     await wait(quick ? 0 : 700);
     endBoot();
@@ -1953,7 +1953,7 @@ function startOwner(data) {
   btn.addEventListener("click", () => { local.set(PW_KEY, ""); location.reload(); });
   data.source = `${data.source} · owner access`;
   $("#srcTag").textContent = "SOURCE: OWNER DATA (ENCRYPTED)";
-  $("#cakeLink").hidden = false; // owner prototype: the crypto layer cake
+  $("#pageSeg").hidden = false; // owner prototype: the crypto layer cake
   applyData(data);
 }
 

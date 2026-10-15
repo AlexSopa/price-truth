@@ -620,3 +620,10 @@ body.rz-x { cursor: col-resize; } body.rz-y { cursor: row-resize; }
   text-decoration: underline dotted var(--fg-4); text-underline-offset: 3px;
 }
 .tip .tip-a { font-size: 12.5px; line-height: 1.45; color: var(--fg-2); }
+
+/* Page toggle, top left: Globe | Crypto */
+.page-seg[hidden] { display: none; }
+.page-seg a { display: inline-flex; align-items: center; background: var(--panel-2); color: var(--fg-2); border-right: 1px solid var(--border); padding: 6px 14px; min-height: 32px; font: 600 13px var(--sans); text-decoration: none; transition: background 0.12s var(--ease); }
+.page-seg a:last-child { border-right: 0; }
+.page-seg a:hover { background: var(--panel-3); color: var(--fg); }
+.page-seg a[aria-current="page"] { background: color-mix(in oklab, var(--accent) 22%, var(--panel-2)); color: var(--fg); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 55%, transparent); }
