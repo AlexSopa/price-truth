@@ -44,10 +44,35 @@ Your hourly Yahoo build (97 markets, local indices and local bond funds) can sit
 
 The build encrypts the data (gzip → AES-256-GCM, key from your passphrase by PBKDF2-SHA256, 310,000 rounds) and publishes only `data/signals.enc.json`. On the site, open **Owner access 🔒** on the landing and enter the passphrase; the data is decrypted in your browser. Without the passphrase the file is unreadable. A weak passphrase can be guessed offline, so use a long one. **LOCK 🔒** forgets it on that device.
 
+## Crypto layer cake (owner prototype)
+
+`crypto.html` shows the crypto market in another shape: a cake of 7 tiers, one tier per layer of crypto, one slice per market, 81 markets in all.
+
+| Tier (bottom to top) | What is in it |
+|---|---|
+| Base money | Bitcoin and the coins made to be money |
+| Layer 1 chains | Ethereum, Solana and the other chains that run programs |
+| Layer 2 | Networks on top of a Layer 1 |
+| Infrastructure | Price feeds, data, storage, compute, AI networks |
+| DeFi | Exchanges, lending, staking, yield |
+| Memes and apps | Meme coins, games, consumer apps |
+| Wall Street | Crypto funds and crypto stocks on US exchanges |
+
+A slice is green when buyers control the bar and red when sellers do. The arcs on the right run from the layers with selling pressure to the layers with buying pressure. Click a slice for its chart. Replay works as on the globe.
+
+```
+npm run build:crypto          # fetches Yahoo Finance for your personal use, writes data/crypto.json
+```
+
+It has no bring-your-own-key mode yet. The page reads `data/crypto.json` (your own copy) or `data/crypto.enc.json` (owner access: the workflow builds it when `GEV_PASSWORD` is set, and the same passphrase opens it). Without one of these files the page shows a notice only. The globe page links to it in own-copy and owner mode.
+
+Limits: price only (no market value, no dominance); no stablecoins; 5 years of history; the Wall Street tier trades on weekdays only. The workflow runs on weekdays, so on a weekend the owner copy is not refreshed. Yahoo symbols for coins are a trap: see the note at the top of `crypto-universe.js`.
+
 ## How it works
 
 | File | Job |
 |---|---|
+| `crypto-universe.js`, `crypto.js`, `crypto.html`, `crypto.css` | The crypto layer cake: its layers and markets, and its page. |
 | `universe.js` | Market lists: `MARKETS` (run-your-own, Yahoo) and `BYOK_MARKETS` (free keys). |
 | `strat.js` | TheStrat engine: scenarios, roll-ups, continuity (FTFC), signals (REV / CONT), chart shapes, replay timeline. |
 | `signals.js` | Turns daily bars into the signals the page reads. Shared by the browser and the build. |

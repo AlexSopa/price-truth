@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>God's Eye View · Crypto Layer Cake</title>
+  <meta name="description" content="The crypto market as a layer cake, read with TheStrat: who controls each layer and where the money rotates." />
+  <meta name="robots" content="noindex" />
+  <meta name="theme-color" content="#100f0d" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%2310b981' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%2310b981'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=JetBrains+Mono:wght@400..600&family=Space+Grotesk:wght@500..700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css?v=16" />
+  <link rel="stylesheet" href="crypto.css?v=1" />
+  <script src="vendor/d3.min.js" defer></script>
+  <script type="module" src="crypto.js?v=1"></script>
+</head>
+<body data-sensor="normal">
+  <div class="gate" id="gate" hidden role="dialog" aria-modal="true" aria-labelledby="gateTitle">
+    <div class="gate-card">
+      <h2 id="gateTitle">Personal use only</h2>
+      <p>This is a free, non-commercial education project. It shows TheStrat bar labels (1, 2U, 2D, 3) worked out from public market data. It does not sell, license or hand out market data.</p>
+      <ul>
+        <li>I will use this page for my own personal, non-commercial education.</li>
+        <li>I will not copy, resell or redistribute what it shows.</li>
+        <li>I understand it is not investment advice. BUY / SELL here only names who controls the price bar.</li>
+      </ul>
+      <p class="gate-fine">Market data belongs to its owners. Price action terms are defined in the TheStrat docs at <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">thestrat.ai/docs</a>.</p>
+      <button class="share" id="gateAgree" type="button">I AGREE · PERSONAL USE</button>
+    </div>
+  </div>
+
+  <div class="gate" id="ownergate" hidden role="dialog" aria-modal="true" aria-labelledby="ogTitle">
+    <form class="gate-card" id="ogForm" autocomplete="off">
+      <h2 id="ogTitle">Crypto layer cake</h2>
+      <p id="ogText">This page is an owner prototype. Its data is published encrypted. Type the owner password to open it.</p>
+      <div class="owner-row" id="ogRow">
+        <input id="ownerPass" type="password" autocomplete="current-password" placeholder="owner password">
+        <button class="share" id="ownerGo" type="submit">Unlock</button>
+      </div>
+      <label class="check" id="ogRemember"><input type="checkbox" id="ownerRemember"> Remember on this device</label>
+      <span class="owner-msg" id="ownerMsg" role="status"></span>
+      <p class="gate-fine"><a href="./">Back to the world globe</a></p>
+    </form>
+  </div>
+
+  <div class="banner">
+    <span class="b-brand">GOD'S EYE VIEW · CRYPTO</span>
+    <span id="srcTag">SOURCE: OWNER DATA</span>
+    <span id="asof">ACQUIRING…</span>
+    <a href="./">World globe <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
+    <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">Learn TheStrat at TheStrat.ai <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
+  </div>
+
+  <header class="bar">
+    <div class="brand">
+      <svg class="eye" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13"/><circle cx="16" cy="16" r="5" class="pupil"/></svg>
+      <span class="wordmark">Crypto Layer Cake</span>
+      <span class="tag">every layer of crypto, one slice per market</span>
+    </div>
+    <div class="meta" id="tracking"></div>
+    <div class="actions">
+      <button class="share ghost" id="lockBtn" type="button" hidden title="Forget the owner password on this device"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span>Lock</span></button>
+    </div>
+  </header>
+
+  <nav class="toolbar" aria-label="View controls">
+    <div class="seg" id="tfSeg" role="group" aria-label="Timeframe"></div>
+    <div class="seg" id="sensorSeg" role="group" aria-label="Sensor mode">
+      <button data-v="normal">Normal</button><button data-v="flir">FLIR</button><button data-v="nvg">NVG</button>
+    </div>
+    <div class="seg" id="flowSeg" role="group" aria-label="Rotation arcs (key F)">
+      <button data-v="control" title="Layers where sellers are in control → layers where buyers are in control">Rotation</button><button data-v="reversal" title="Layers reversing down → layers reversing up">Reversals</button><button data-v="off">Off</button>
+    </div>
+  </nav>
+
+  <main class="ops">
+    <section class="globe-wrap cake-wrap" aria-label="Layer cake of buying and selling in crypto">
+      <canvas id="cake"></canvas>
+      <div class="hud tl"><div id="hudOrbit">CAKE-01 // 7 LAYERS</div><div id="hudMode">SENSOR NORMAL</div></div>
+      <div class="hud tr"><div><span class="rec"></span>REC</div><div id="hudTf">TF DAY</div><div id="hudReplay" class="hud-replay"></div></div>
+      <div class="hud-headline" id="hudHeadline"></div>
+      <div class="replay-bar">
+        <button class="replay" id="replayBtn" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 5v14l11-7z" fill="currentColor" stroke="none"/></svg><span>Replay</span></button>
+        <div class="seg mini" id="stepSeg" role="group" aria-label="Replay step"><button data-v="bar" title="One frame per completed bar">By bar</button><button data-v="day" title="The bar in force, day by day">By day</button></div>
+        <div class="seg mini" id="rangeSeg" role="group" aria-label="Replay range"><button data-v="3M">3M</button><button data-v="6M">6M</button><button data-v="1Y">1Y</button></div>
+      </div>
+      <div class="replay-prog"><i id="replayProg"></i></div>
+      <div class="hud bl">
+        <div class="legend" id="legend"></div>
+        <div class="hud-dim" id="flowHint"></div>
+        <div class="hud-dim" id="dragHint">DRAG TO TURN · CLICK A SLICE</div>
+      </div>
+      <div class="hud br" id="hudTarget"></div>
+      <div class="corners"></div><div class="scan"></div>
+    </section>
+
+    <aside class="intel" aria-live="polite">
+      <div class="flow-line" id="flowLine"></div>
+      <h1 id="headline">Acquiring signal…</h1>
+      <p id="subline" class="subline"></p>
+      <div class="counts" id="counts"></div>
+      <div class="tug">
+        <div class="tug-head"><span>BITCOIN</span><span id="tugVerdict"></span><span>ALTCOINS</span></div>
+        <div class="tug-bar"><i id="tugBtc"></i><i id="tugAlt"></i></div>
+        <div class="tug-foot"><span id="tugBtcTxt"></span><span id="tugAltTxt"></span></div>
+      </div>
+      <div class="layer-list" id="layerList"></div>
+      <p class="disclaim">Education only. Not investment advice. BUY / SELL = who controls the price bar, not a trade recommendation.</p>
+      <ul class="insights" id="insights"></ul>
+    </aside>
+  </main>
+
+  <section class="panel" id="layers">
+    <div class="panel-head">
+      <h2>Layer Analysis</h2>
+      <span class="panel-meta" id="layerMeta"></span>
+    </div>
+    <div id="layerPanels"></div>
+  </section>
+
+  <section class="panel" id="reversals">
+    <div class="panel-head">
+      <h2>Reversals &amp; Continuations</h2>
+      <span class="panel-meta" id="revMeta"></span>
+    </div>
+    <div class="rev-tfs" id="revTfs"></div>
+    <div class="rev-cols">
+      <div><h3 class="rev-h up">Turning up</h3><div id="revUp"></div></div>
+      <div><h3 class="rev-h down">Turning down</h3><div id="revDown"></div></div>
+    </div>
+  </section>
+
+  <section class="panel explain">
+    <div class="panel-head"><h2>How to read this</h2><span class="panel-meta">Full definitions at <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">thestrat.ai/docs</a>.</span></div>
+    <p class="lead">The cake is the crypto market. Each tier is one layer of crypto, from <b>base money</b> at the bottom to <b>Wall Street</b> at the top. Each slice of a tier is one market. Its color shows who controls the price bar: <b>green = buyers, red = sellers</b>, dark = nobody yet. The arcs on the right show rotation: out of the layers where sellers are in control, into the layers where buyers are.</p>
+    <div class="cards" id="howCards"></div>
+    <p class="fine" id="layerNotes"></p>
+    <p class="fine">Limits. The data is price only: it has no market value and no dominance figures, so the arcs show which side is pushing price, not money that physically moves. Every trade has a buyer and a seller. Stablecoins are left out, because their price stays at 1.00. The price history goes back 5 years, so a coin that started in 2024 or 2025 has only 2 or 3 yearly bars. Coins trade every day; the Wall Street tier trades on weekdays only, so on a weekend it shows Friday's bar. Bars still trading are live and can change until they close.</p>
+  </section>
+
+  <footer class="foot">
+    <p>Personal, non-commercial use only. Education, not investment advice. Price action terms: <a href="https://thestrat.ai/docs/" target="_blank" rel="noopener">thestrat.ai/docs</a>. Owner prototype: the data is the owner's own copy from Yahoo Finance, published encrypted. Not affiliated with Yahoo.</p>
+    <p id="footData"></p>
+    <p>Keys: D W M Q Y timeframes · 1 2 3 sensors · F rotation arcs · R replay · Esc close.</p>
+  </footer>
+
+  <div class="tip" id="tip" role="tooltip" hidden></div>
+
+  <div class="drawer" id="drawer" hidden>
+    <div class="drawer-card" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+      <button class="close" id="drawerClose" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      <div id="drawerBody"></div>
+    </div>
+  </div>
+</body>
+</html>

@@ -111,6 +111,7 @@ a { color: var(--accent); }
 .owner-row input { flex: 1; background: var(--bg); border: 1px solid var(--border-hi); border-radius: var(--r); color: var(--fg); padding: 7px 10px; font: 12px var(--mono); }
 .owner-msg { font: 11px var(--mono); color: var(--down); }
 .share:disabled { opacity: 0.45; cursor: not-allowed; }
+.share[hidden], .banner a[hidden] { display: none; }
 .loadbar { height: 2px; background: var(--panel-3); }
 .loadbar[hidden] { display: none; }
 .loadbar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.4s var(--ease); }

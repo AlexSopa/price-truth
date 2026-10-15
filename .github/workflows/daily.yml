@@ -54,17 +54,24 @@ jobs:
       - name: Market data (your own copy, or the owner's encrypted copy)
         if: steps.plan.outputs.go == 'true' && steps.plan.outputs.data == 'true'
         run: npm run build
+      - name: Crypto layer cake data (same rules as the market data; a failure here never blocks the site)
+        if: steps.plan.outputs.go == 'true' && steps.plan.outputs.data == 'true'
+        continue-on-error: true
+        run: npm run build:crypto
       - name: Assemble site
         if: steps.plan.outputs.go == 'true'
         run: |
           mkdir -p _site/data
           cp index.html app.js style.css strat.js signals.js byok.js vault.js universe.js about.js yahoo.js og.png _site/
+          cp crypto.html crypto.js crypto.css crypto-universe.js _site/
           cp -r vendor _site/
           touch _site/.nojekyll
           if [ -n "$GEV_PASSWORD" ]; then
             cp data/signals.enc.json _site/data/
+            if [ -f data/crypto.enc.json ]; then cp data/crypto.enc.json _site/data/; fi
           elif [ "$ORIGINAL" != "true" ] && [ -f data/signals.json ]; then
             cp data/signals.json _site/data/
+            if [ -f data/crypto.json ]; then cp data/crypto.json _site/data/; fi
           fi
           ls -la _site _site/data
       - uses: actions/configure-pages@v5
