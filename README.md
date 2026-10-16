@@ -28,19 +28,21 @@ npm run build                 # fetches Yahoo Finance for your personal use, wri
 python -m http.server 8765    # open http://127.0.0.1:8765
 ```
 
+To keep it current, run `npm run live` in a second window: it runs both builds now and then every 15 minutes. Open pages look for a new data file every 3 minutes and redraw by themselves.
+
 With a local `data/signals.json`, the page uses it (97 markets, including local indices and local government bond funds), after a personal-use agreement. `data/` is git-ignored.
 
 ### 3. Your own copy on GitHub
 
-Fork or "Use this template", then in your copy: Actions → enable workflows, run "Market update (your own copy)" once, and Settings → Pages → deploy from `main`. The workflow refreshes your copy hourly on trading days. It is switched off in this original repo. Note: free GitHub Pages sites are public, so you are the one publishing your copy.
+Fork or "Use this template", then in your copy: Actions → enable workflows, run "Market update (your own copy)" once, and Settings → Pages → deploy from `main`. The workflow refreshes your copy every 15 minutes. It is switched off in this original repo. Note: free GitHub Pages sites are public, so you are the one publishing your copy.
 
 ### 4. Owner access (your own full data, password-protected)
 
-Your hourly Yahoo build (97 markets, local indices and local bond funds) can sit on the same site for you only:
+Your Yahoo build (97 markets, local indices and local bond funds) can sit on the same site for you only:
 
 1. Settings → Pages → Source: **GitHub Actions** (the workflow publishes the site; no data is ever committed to git).
 2. Add a repository secret named `GEV_PASSWORD` with a long passphrase (12+ characters): `gh secret set GEV_PASSWORD`.
-3. Run "Build and deploy" once (Actions tab, or `gh workflow run daily.yml`). It then refreshes hourly on trading days.
+3. Run "Build and deploy" once (Actions tab, or `gh workflow run daily.yml`). It then refreshes every 15 minutes. An open page picks up each new version by itself (it looks every 3 minutes), so it is at most about 20 minutes behind. GitHub can start scheduled runs some minutes late.
 
 The build encrypts the data (gzip → AES-256-GCM, key from your passphrase by PBKDF2-SHA256, 310,000 rounds) and publishes only `data/signals.enc.json`. On the site, open **Owner access 🔒** on the landing and enter the passphrase; the data is decrypted in your browser. Without the passphrase the file is unreadable. A weak passphrase can be guessed offline, so use a long one. **LOCK 🔒** forgets it on that device.
 
@@ -75,7 +77,7 @@ Two free extras come with the build (`scripts/crypto-extras.mjs`), with no key a
 
 Each extra is optional. When its source does not answer, the build leaves it out and the page hides that part.
 
-Limits: the arcs show pressure, not tracked transfers; stablecoins have no slice (they are the plate); 10 years of daily history at most; the Wall Street tier trades on weekdays only. The workflow also runs every 3 hours on Saturday and Sunday for the coins. Yahoo symbols for coins are a trap: see the note at the top of `crypto-universe.js`.
+Limits: the arcs show pressure, not tracked transfers; stablecoins have no slice (they are the plate); 10 years of daily history at most; the Wall Street tier trades on weekdays only. Yahoo symbols for coins are a trap: see the note at the top of `crypto-universe.js`.
 
 ## How it works
 
