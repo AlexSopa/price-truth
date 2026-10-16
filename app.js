@@ -3,6 +3,7 @@ import { TIMEFRAMES, control, continuity, reversal, isTurn, decodeState, periodK
 import { buildSignals } from "./signals.js?v=6";
 import { PROVIDERS, loadMarkets } from "./byok.js?v=6";
 import { unseal } from "./vault.js?v=6";
+import { watchFile } from "./refresh.js?v=1";
 import { about, BOND_BASICS } from "./about.js?v=1";
 
 const TF_NAME = { D: "Today", W: "This week", M: "This month", Q: "This quarter", Y: "This year" };
@@ -124,8 +125,22 @@ async function tryOwnData() {
 
 // Owner access: the owner's data is published encrypted. The password opens it in this browser only.
 const PW_KEY = "gev-owner-pass";
+let ownerPw = null; // kept in this tab only, to open the newer versions the page picks up
 async function openVault(vault, pw) {
-  try { return await unseal(vault, pw); } catch { return null; }
+  try { const data = await unseal(vault, pw); ownerPw = pw; return data; } catch { return null; }
+}
+
+// New data while the page is open (every 15 minutes): redraw in place. Not during a replay: try again later.
+let watching = false;
+function keepCurrent(url, open) {
+  if (watching) return;
+  watching = true;
+  watchFile(url, async (text) => {
+    if (replayTimer) return false;
+    const data = await open(text);
+    if (!data) return false;
+    applyData(data);
+  });
 }
 
 const KEYS_KEY = "gev-keys-v1";
@@ -1915,6 +1930,7 @@ async function main() {
     $("#srcTag").textContent = "SOURCE: YOUR OWN COPY";
     $("#pageSeg").hidden = false; // the crypto layer cake reads the copy's own data too
     applyData(own);
+    keepCurrent("data/signals.json", (text) => JSON.parse(text));
     await wait(quick ? 0 : 700);
     endBoot();
     return;
@@ -1955,6 +1971,11 @@ function startOwner(data) {
   $("#srcTag").textContent = "SOURCE: OWNER DATA (ENCRYPTED)";
   $("#pageSeg").hidden = false; // owner prototype: the crypto layer cake
   applyData(data);
+  keepCurrent("data/signals.enc.json", async (text) => {
+    const next = await openVault(JSON.parse(text), ownerPw);
+    if (next) next.source = `${next.source} · owner access`;
+    return next;
+  });
 }
 
 main();

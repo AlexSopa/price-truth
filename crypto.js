@@ -5,6 +5,7 @@
 import { LAYERS } from "./crypto-universe.js?v=1";
 import { TIMEFRAMES, control, continuity, reversal, isTurn, decodeState, periodKey } from "./strat.js?v=6";
 import { unseal } from "./vault.js?v=6";
+import { watchFile } from "./refresh.js?v=1";
 
 const TF_NAME = { D: "Today", W: "This week", M: "This month", Q: "This quarter", Y: "This year" };
 const TF_WORD = { D: "day", W: "week", M: "month", Q: "quarter", Y: "year" };
@@ -96,8 +97,9 @@ async function loadData() {
   return {};
 }
 
+let ownerPw = null; // kept in this tab only, to open the newer versions the page picks up
 async function openVault(vault, pw) {
-  try { return await unseal(vault, pw); } catch { return null; }
+  try { const data = await unseal(vault, pw); ownerPw = pw; return data; } catch { return null; }
 }
 
 // Owner password. Without a vault there is nothing to open: the page says so and stops.
@@ -1186,12 +1188,27 @@ function renderHeader() {
   $("#footData").textContent = `Data: ${d.source}. Generated ${d.generatedAt}.${d.failed?.length ? ` Not loaded: ${d.failed.join(", ")}.` : ""}${d.stable ? ` Stablecoin supply: ${d.stable.source}.` : ""}${d.value ? ` Market value shares: data provided by ${d.value.source}${d.value.cover ? `; the coins on the cake hold ${d.value.cover}% of all crypto value` : ""}.` : ""}`;
 }
 
-function applyData(data) {
+function setData(data) {
   state.data = data;
   tiers = {};
   for (const m of data.markets) if (LAYER.has(m.layer)) (tiers[m.layer] ??= []).push(m);
   cash = data.stable?.tf ? { symbol: "STABLECOINS", t: "USD", name: "Stablecoin supply", live: false, ...data.stable } : null;
   renderHeader();
+}
+
+// New data while the page is open (every 15 minutes): redraw in place. Not during a replay: try again later.
+function keepCurrent(url, open) {
+  watchFile(url, async (text) => {
+    if (replayTimer) return false;
+    const data = await open(text);
+    if (!data) return false;
+    setData(data);
+    update({});
+  });
+}
+
+function applyData(data) {
+  setData(data);
   wireControls();
   renderHow();
   const { patch, layer } = readHash();
@@ -1215,6 +1232,7 @@ async function main() {
     await personalUseGate();
     $("#srcTag").textContent = "SOURCE: YOUR OWN COPY";
     applyData(found.plain);
+    keepCurrent("data/crypto.json", (text) => JSON.parse(text));
     return;
   }
   // Owner access: the remembered password from this page or the globe page opens the vault at once.
@@ -1226,6 +1244,11 @@ async function main() {
   $("#lockBtn").hidden = false;
   $("#lockBtn").addEventListener("click", () => { local.set(PW_KEY, ""); location.reload(); });
   applyData(data);
+  keepCurrent("data/crypto.enc.json", async (text) => {
+    const next = await openVault(JSON.parse(text), ownerPw);
+    if (next) next.source = `${next.source} · owner access`;
+    return next;
+  });
 }
 
 main();

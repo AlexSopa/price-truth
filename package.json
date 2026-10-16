@@ -5,6 +5,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:crypto": "node scripts/build.mjs crypto",
+    "live": "node scripts/live.mjs",
     "test": "node scripts/test-strat.mjs"
   }
 }
