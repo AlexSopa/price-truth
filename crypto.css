@@ -32,3 +32,5 @@
 @media (max-width: 900px) {
   .cake-wrap { min-height: min(640px, 165vw); }
 }
+
+#headline .tally { display: block; margin-top: 6px; font-size: 0.55em; font-weight: 600; letter-spacing: 0.02em; opacity: 0.9; }

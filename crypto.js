@@ -226,10 +226,15 @@ function renderIntel() {
   const when = tf === "D" ? "today" : `this ${TF_WORD[tf]}`;
   const names = (arr) => joinWords(arr.slice(0, 3).map((p) => esc(state.views[p.id].name)));
 
+  // Green vs red: 2u/2d/3 bars split by candle color (g: 1 green, -1 red). Insides are left out.
+  const cc = (st, g) => pool.filter((m) => m.tf[tf].s === st && m.tf[tf].g === g).length;
+  const G = { u: cc("2u", 1), d: cc("2d", 1), t: cc("3", 1) }, R = { d: cc("2d", -1), u: cc("2u", -1), t: cc("3", -1) };
+  const gT = G.u + G.d + G.t, rT = R.d + R.u + R.t;
   let head;
-  if (!n["2u"] && !n["2d"]) head = `${TF_NAME[tf]}, almost nothing broke out. Crypto is coiling.`;
-  else if (n["2d"] > n["2u"]) head = `${TF_NAME[tf]}, <span class="down">${n["2d"]} of ${pool.length}</span> crypto markets broke below ${TF_PREV[tf]} low.`;
-  else head = `${TF_NAME[tf]}, <span class="up">${n["2u"]} of ${pool.length}</span> crypto markets broke above ${TF_PREV[tf]} high.`;
+  if (!gT && !rT) head = `${TF_NAME[tf]}, almost nothing broke out. Crypto is coiling.`;
+  else if (gT === rT) head = `${TF_NAME[tf]}, crypto markets are split evenly.`;
+  else head = `${TF_NAME[tf]}, the majority of crypto markets are ${gT > rT ? '<span class="up">up</span>' : '<span class="down">down</span>'}.`;
+  head += `<span class="tally"><span class="up">${gT} green</span> (2u ${G.u} · 2d ${G.d} · 3 ${G.t}) vs <span class="down">${rT} red</span> (2d ${R.d} · 2u ${R.u} · 3 ${R.t})</span>`;
   let sub = `Sellers control ${sells} of ${views.length} layers. Buyers control ${buys}. ${views.length - buys - sells} are undecided. Headlines tell stories. Price tells the truth.`;
   if (state.flow === "reversal") {
     const { src, dst } = flowPairs((id) => revScore(id), FLOW_MIN.reversal);
